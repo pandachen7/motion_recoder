@@ -1,35 +1,49 @@
-import cv2
-import numpy as np
-import json
 import os
 import threading
-import yaml
+import time
 from datetime import datetime
 
+import cv2
+import numpy as np
+import yaml
+
+from loglo import getUniqueLogger
+
+log = getUniqueLogger(__file__)
+
+
 class MotionDetector:
-    def __init__(self, config_path='./cfg/config.yaml'):
-        with open(config_path, 'r') as f:
+    def __init__(self, config_path="./cfg/config.yaml"):
+        with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
 
-        self.video_source = self.config['source']
-        self.rtsp_fps = self.config.get('rtsp_fps', 20)
-        self.motion_area_threshold = self.config['motion_area_threshold']
-        self.output_path = self.config['output_path']
-        self.sample_per_second = self.config['sample_per_second']
-        self.max_buff_frames = self.config['max_buff_frames']
-        self.mask_path = self.config.get('mask_path')
-        self.imshow_enabled = self.config['imshow']
+        self.video_source = self.config["source"]
+        self.video_fps = self.config.get("video_fps", 20)
+        self.motion_area_threshold = self.config["motion_area_threshold"]
+        self.output_path = self.config["output_path"]
+        self.sample_per_second = self.config["sample_per_second"]
+        self.max_buff_frames = self.config["max_buff_frames"]
+        self.mask_path = self.config.get("mask_path")
+        self.imshow_enabled = self.config["imshow"]
+
+        if self.sample_per_second < 1:
+            self.sample_per_second = 1
+        self.video_type = "stream" if "://" in self.video_source else "file"
 
         if not os.path.exists(self.output_path):
-            os.makedirs(self.output_path)
+            try:
+                os.makedirs(self.output_path)
+            except OSError:
+                log.d("Could not create output directory. use `./out` instead.")
+                self.output_path = "./out"
 
         self.cap = cv2.VideoCapture(self.video_source)
         if not self.cap.isOpened():
             raise ValueError("Error: Could not open video source.")
 
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        if self.video_source.startswith('rtsp://') and self.fps == 0:
-            self.fps = self.rtsp_fps
+        if self.fps == 0:
+            self.fps = self.video_fps
 
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -53,7 +67,10 @@ class MotionDetector:
         while True:
             ret, frame = self.cap.read()
             if not ret:
-                break
+                if self.video_type == "file":
+                    break
+                else:
+                    continue
             with self.lock:
                 self.latest_frame = frame
         self.cap.release()
@@ -78,7 +95,9 @@ class MotionDetector:
                     self.frame_buffer.pop(0)
 
             if len(self.frame_buffer) > 0:
-                self.background = np.median(np.array(self.frame_buffer), axis=0).astype(np.uint8)
+                self.background = np.median(np.array(self.frame_buffer), axis=0).astype(
+                    np.uint8
+                )
 
             if self.background is not None:
                 frame_delta = cv2.absdiff(self.background, gray)
@@ -87,7 +106,9 @@ class MotionDetector:
                 if self.mask is not None:
                     thresh = cv2.bitwise_and(thresh, thresh, mask=self.mask)
 
-                contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours, _ = cv2.findContours(
+                    thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                )
 
                 motion_area = 0
                 for contour in contours:
@@ -102,13 +123,12 @@ class MotionDetector:
                         self.stop_recording()
 
                 if self.imshow_enabled:
-                    cv2.imshow('Frame', frame)
-                    cv2.imshow('Thresh', thresh)
+                    cv2.imshow("Frame", frame)
+                    cv2.imshow("Thresh", thresh)
                     if self.background is not None:
-                        cv2.imshow('Background', self.background)
+                        cv2.imshow("Background", self.background)
 
-
-            if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord('q'):
+            if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
         self.stop_recording()
@@ -119,8 +139,10 @@ class MotionDetector:
         self.is_recording = True
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = os.path.join(self.output_path, f"{now}.avi")
-        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        self.video_writer = cv2.VideoWriter(filename, fourcc, self.fps, (self.width, self.height))
+        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        self.video_writer = cv2.VideoWriter(
+            filename, fourcc, self.fps, (self.width, self.height)
+        )
         print(f"Started recording: {filename}")
 
     def stop_recording(self):
@@ -131,7 +153,8 @@ class MotionDetector:
                 self.video_writer = None
                 print("Stopped recording.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         detector = MotionDetector()
         detector.run()

@@ -1,5 +1,5 @@
 source: rtsp://user:password@ip:port/stream
-rtsp_fps: 20
+video_fps: 20
 motion_area_threshold: 500
 output_path: ./recordings
 sample_per_second: 1
