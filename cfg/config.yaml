@@ -1,0 +1,8 @@
+source: rtsp://user:password@ip:port/stream
+rtsp_fps: 20
+motion_area_threshold: 500
+output_path: ./recordings
+sample_per_second: 1
+max_buff_frames: 10
+mask_path: ./img/mask.png
+imshow: true
