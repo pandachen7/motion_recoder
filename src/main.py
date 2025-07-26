@@ -25,6 +25,7 @@ class MotionDetector:
         self.max_buff_frames = self.config["max_buff_frames"]
         self.mask_path = self.config.get("mask_path")
         self.imshow_enabled = self.config["imshow"]
+        self.record_seconds = self.config.get("record_seconds", 5)
 
         if self.sample_per_second < 1:
             self.sample_per_second = 1
@@ -57,6 +58,7 @@ class MotionDetector:
         self.background = None
         self.is_recording = False
         self.video_writer = None
+        self.last_motion_time = 0
 
         self.latest_frame = None
         self.lock = threading.Lock()
@@ -115,11 +117,13 @@ class MotionDetector:
                     motion_area += cv2.contourArea(contour)
 
                 if motion_area > self.motion_area_threshold:
+                    self.last_motion_time = time.time()
                     if not self.is_recording:
                         self.start_recording()
+
+                if self.is_recording:
                     self.video_writer.write(frame)
-                else:
-                    if self.is_recording:
+                    if time.time() - self.last_motion_time > self.record_seconds:
                         self.stop_recording()
 
                 if self.imshow_enabled:
@@ -137,8 +141,13 @@ class MotionDetector:
 
     def start_recording(self):
         self.is_recording = True
-        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = os.path.join(self.output_path, f"{now}.avi")
+        now = datetime.now()
+        date_path = now.strftime("%Y/%m/%d")
+        output_dir = os.path.join(self.output_path, date_path)
+        os.makedirs(output_dir, exist_ok=True)
+
+        time_str = now.strftime("%H-%M-%S")
+        filename = os.path.join(output_dir, f"{time_str}.avi")
         fourcc = cv2.VideoWriter_fourcc(*"XVID")
         self.video_writer = cv2.VideoWriter(
             filename, fourcc, self.fps, (self.width, self.height)

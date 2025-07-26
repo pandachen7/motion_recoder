@@ -5,4 +5,5 @@ output_path: ./recordings
 sample_per_second: 1
 max_buff_frames: 10
 mask_path: ./img/mask.png
-imshow: true
+imshow: false
+record_seconds: 10
