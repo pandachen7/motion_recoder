@@ -26,6 +26,7 @@ class MotionDetector:
         self.mask_path = self.config.get("mask_path")
         self.imshow_enabled = self.config["imshow"]
         self.record_seconds = self.config.get("record_seconds", 5)
+        self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
 
         if self.sample_per_second < 1:
             self.sample_per_second = 1
@@ -148,9 +149,9 @@ class MotionDetector:
 
         time_str = now.strftime("%H-%M-%S")
         filename = os.path.join(output_dir, f"{time_str}.avi")
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        # fourcc = cv2.VideoWriter_fourcc(*"XVID")
         self.video_writer = cv2.VideoWriter(
-            filename, fourcc, self.fps, (self.width, self.height)
+            filename, self.fourcc, self.fps, (self.width, self.height)
         )
         print(f"Started recording: {filename}")
 
