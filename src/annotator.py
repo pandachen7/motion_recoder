@@ -1,7 +1,7 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget, QFileDialog, QSlider, QInputDialog
-from PyQt6.QtGui import QPixmap, QImage, QPainter, QPen, QColor
-from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QFileDialog, QSlider, QInputDialog, QToolBar, QHBoxLayout
+from PyQt6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QAction, QIcon
+from PyQt6.QtCore import Qt, QPoint, QSize
 import cv2
 import numpy as np
 
@@ -11,43 +11,65 @@ class Annotator(QMainWindow):
         self.setWindowTitle("Image/Video Annotator")
         self.setGeometry(100, 100, 800, 600)
 
+        # Main layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
 
+        # Toolbar
+        self.toolbar = QToolBar("Main Toolbar")
+        self.addToolBar(self.toolbar)
+
+        # Image label
         self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.layout.addWidget(self.image_label)
 
-        controls_layout = QVBoxLayout()
+        # --- Actions ---
+        style = self.style()
+        self.load_file_action = QAction(style.standardIcon(getattr(style, 'SP_FileIcon')), "Open File", self)
+        self.load_file_action.triggered.connect(self.load_file)
+        self.toolbar.addAction(self.load_file_action)
 
-        self.load_button = QPushButton("Load Image/Video/Stream")
-        self.load_button.clicked.connect(self.load_source)
-        controls_layout.addWidget(self.load_button)
+        self.load_rtsp_action = QAction(style.standardIcon(getattr(style, 'SP_ComputerIcon')), "Open RTSP", self)
+        self.load_rtsp_action.triggered.connect(self.load_rtsp)
+        self.toolbar.addAction(self.load_rtsp_action)
 
+        self.toolbar.addSeparator()
+
+        self.brush_action = QAction(QIcon.fromTheme("draw-freehand"), "Brush", self)
+        self.brush_action.setCheckable(True)
+        self.brush_action.setChecked(True)
+        self.toolbar.addAction(self.brush_action)
+
+        self.fill_action = QAction(QIcon.fromTheme("color-fill"), "Fill", self)
+        self.fill_action.triggered.connect(self.fill_mask)
+        self.toolbar.addAction(self.fill_action)
+
+        self.draw_quad_action = QAction(QIcon.fromTheme("draw-polygon"), "Draw Quad", self)
+        self.draw_quad_action.setCheckable(True)
+        self.draw_quad_action.toggled.connect(self.toggle_draw_quad_mode)
+        self.toolbar.addAction(self.draw_quad_action)
+
+        self.toolbar.addSeparator()
+
+        self.save_mask_action = QAction(style.standardIcon(getattr(style, 'SP_DialogSaveButton')), "Save Mask", self)
+        self.save_mask_action.triggered.connect(self.save_mask)
+        self.toolbar.addAction(self.save_mask_action)
+
+        # Brush size slider in a container to add to toolbar
+        slider_container = QWidget()
+        slider_layout = QHBoxLayout(slider_container)
         self.brush_size_slider = QSlider(Qt.Orientation.Horizontal)
         self.brush_size_slider.setMinimum(1)
         self.brush_size_slider.setMaximum(50)
         self.brush_size_slider.setValue(10)
         self.brush_size_slider.valueChanged.connect(self.update_brush_size_label)
-        controls_layout.addWidget(self.brush_size_slider)
+        self.brush_size_label = QLabel(f"Brush: {self.brush_size_slider.value()}")
+        slider_layout.addWidget(self.brush_size_label)
+        slider_layout.addWidget(self.brush_size_slider)
+        self.toolbar.addWidget(slider_container)
 
-        self.brush_size_label = QLabel(f"Brush Size: {self.brush_size_slider.value()}")
-        controls_layout.addWidget(self.brush_size_label)
-
-        self.fill_button = QPushButton("Fill")
-        self.fill_button.clicked.connect(self.fill_mask)
-        controls_layout.addWidget(self.fill_button)
-
-        self.save_mask_button = QPushButton("Save Mask")
-        self.save_mask_button.clicked.connect(self.save_mask)
-        controls_layout.addWidget(self.save_mask_button)
-
-        self.draw_quad_button = QPushButton("Draw Quadrilateral")
-        self.draw_quad_button.setCheckable(True)
-        self.draw_quad_button.toggled.connect(self.toggle_draw_quad_mode)
-        controls_layout.addWidget(self.draw_quad_button)
-
-        self.layout.addLayout(controls_layout)
 
         self.source_path = None
         self.original_frame = None
@@ -68,7 +90,7 @@ class Annotator(QMainWindow):
             self.update_display() # Remove any drawn quad
 
     def update_brush_size_label(self):
-        self.brush_size_label.setText(f"Brush Size: {self.brush_size_slider.value()}")
+        self.brush_size_label.setText(f"Brush: {self.brush_size_slider.value()}")
 
     def fill_mask(self):
         if self.mask is not None:
@@ -84,20 +106,18 @@ class Annotator(QMainWindow):
                 inverted_mask = cv2.bitwise_not(self.mask)
                 cv2.imwrite(fileName, inverted_mask)
 
-    def load_source(self):
+    def load_file(self):
         options = QFileDialog.Options()
-        file_dialog = QFileDialog(self)
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        file_dialog.setNameFilter("All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)")
-
-        if file_dialog.exec():
-            self.source_path = file_dialog.selectedFiles()[0]
+        fileName, _ = QFileDialog.getOpenFileName(self, "Open Image or Video File", "", "All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)", options=options)
+        if fileName:
+            self.source_path = fileName
             self.process_source()
-        else:
-            text, ok = QInputDialog.getText(self, 'RTSP Stream', 'Enter RTSP URL:')
-            if ok and text:
-                self.source_path = text
-                self.process_source()
+
+    def load_rtsp(self):
+        text, ok = QInputDialog.getText(self, 'RTSP Stream', 'Enter RTSP URL:')
+        if ok and text:
+            self.source_path = text
+            self.process_source()
 
     def process_source(self):
         if self.source_path.lower().endswith(('.png', '.jpg', '.jpeg')):
