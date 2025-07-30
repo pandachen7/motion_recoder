@@ -1,9 +1,22 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QFileDialog, QSlider, QInputDialog, QToolBar, QHBoxLayout
-from PyQt6.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QAction, QIcon
-from PyQt6.QtCore import Qt, QPoint, QSize
+
 import cv2
 import numpy as np
+from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMainWindow,
+    QSlider,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
 
 class Annotator(QMainWindow):
     def __init__(self):
@@ -27,11 +40,15 @@ class Annotator(QMainWindow):
 
         # --- Actions ---
         style = self.style()
-        self.load_file_action = QAction(style.standardIcon(getattr(style, 'SP_FileIcon')), "Open File", self)
+        self.load_file_action = QAction(
+            style.standardIcon(getattr(style, "SP_FileIcon")), "Open File", self
+        )
         self.load_file_action.triggered.connect(self.load_file)
         self.toolbar.addAction(self.load_file_action)
 
-        self.load_rtsp_action = QAction(style.standardIcon(getattr(style, 'SP_ComputerIcon')), "Open RTSP", self)
+        self.load_rtsp_action = QAction(
+            style.standardIcon(getattr(style, "SP_ComputerIcon")), "Open RTSP", self
+        )
         self.load_rtsp_action.triggered.connect(self.load_rtsp)
         self.toolbar.addAction(self.load_rtsp_action)
 
@@ -46,14 +63,18 @@ class Annotator(QMainWindow):
         self.fill_action.triggered.connect(self.fill_mask)
         self.toolbar.addAction(self.fill_action)
 
-        self.draw_quad_action = QAction(QIcon.fromTheme("draw-polygon"), "Draw Quad", self)
+        self.draw_quad_action = QAction(
+            QIcon.fromTheme("draw-polygon"), "Draw Quad", self
+        )
         self.draw_quad_action.setCheckable(True)
         self.draw_quad_action.toggled.connect(self.toggle_draw_quad_mode)
         self.toolbar.addAction(self.draw_quad_action)
 
         self.toolbar.addSeparator()
 
-        self.save_mask_action = QAction(style.standardIcon(getattr(style, 'SP_DialogSaveButton')), "Save Mask", self)
+        self.save_mask_action = QAction(
+            style.standardIcon(getattr(style, "SP_DialogSaveButton")), "Save Mask", self
+        )
         self.save_mask_action.triggered.connect(self.save_mask)
         self.toolbar.addAction(self.save_mask_action)
 
@@ -70,7 +91,6 @@ class Annotator(QMainWindow):
         slider_layout.addWidget(self.brush_size_slider)
         self.toolbar.addWidget(slider_container)
 
-
         self.source_path = None
         self.original_frame = None
         self.display_frame = None
@@ -82,12 +102,11 @@ class Annotator(QMainWindow):
         self.draw_quad_mode = False
         self.quad_points = []
 
-
     def toggle_draw_quad_mode(self, checked):
         self.draw_quad_mode = checked
         if not checked:
-            self.quad_points = [] # Reset points when mode is turned off
-            self.update_display() # Remove any drawn quad
+            self.quad_points = []  # Reset points when mode is turned off
+            self.update_display()  # Remove any drawn quad
 
     def update_brush_size_label(self):
         self.brush_size_label.setText(f"Brush: {self.brush_size_slider.value()}")
@@ -100,7 +119,9 @@ class Annotator(QMainWindow):
     def save_mask(self):
         if self.mask is not None:
             options = QFileDialog.Options()
-            fileName, _ = QFileDialog.getSaveFileName(self, "Save Mask File", "", "PNG Files (*.png)", options=options)
+            fileName, _ = QFileDialog.getSaveFileName(
+                self, "Save Mask File", "", "PNG Files (*.png)", options=options
+            )
             if fileName:
                 # Invert mask so drawing is black and background is white
                 inverted_mask = cv2.bitwise_not(self.mask)
@@ -108,19 +129,25 @@ class Annotator(QMainWindow):
 
     def load_file(self):
         options = QFileDialog.Options()
-        fileName, _ = QFileDialog.getOpenFileName(self, "Open Image or Video File", "", "All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Image or Video File",
+            "",
+            "All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)",
+            options=options,
+        )
         if fileName:
             self.source_path = fileName
             self.process_source()
 
     def load_rtsp(self):
-        text, ok = QInputDialog.getText(self, 'RTSP Stream', 'Enter RTSP URL:')
+        text, ok = QInputDialog.getText(self, "RTSP Stream", "Enter RTSP URL:")
         if ok and text:
             self.source_path = text
             self.process_source()
 
     def process_source(self):
-        if self.source_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if self.source_path.lower().endswith((".png", ".jpg", ".jpeg")):
             self.original_frame = cv2.imread(self.source_path)
         else:
             cap = cv2.VideoCapture(self.source_path)
@@ -138,7 +165,13 @@ class Annotator(QMainWindow):
             print("Error: Could not load image.")
             return
 
-        self.mask = np.ones((self.original_frame.shape[0], self.original_frame.shape[1]), dtype=np.uint8) * 255
+        self.mask = (
+            np.ones(
+                (self.original_frame.shape[0], self.original_frame.shape[1]),
+                dtype=np.uint8,
+            )
+            * 255
+        )
         self.resize_frame()
         self.update_display()
 
@@ -147,7 +180,7 @@ class Annotator(QMainWindow):
             return
 
         h, w, _ = self.original_frame.shape
-        screen_h = self.height() - 150 # Adjust for buttons and controls
+        screen_h = self.height() - 150  # Adjust for buttons and controls
         screen_w = self.width() - 20
 
         if h > 0 and w > 0:
@@ -169,8 +202,10 @@ class Annotator(QMainWindow):
 
         # Resize mask and apply it
         if self.mask is not None:
-            display_mask = cv2.resize(self.mask, (display_frame_copy.shape[1], display_frame_copy.shape[0]))
-            display_frame_copy[display_mask == 0] = [0, 0, 0] # Black for masked area
+            display_mask = cv2.resize(
+                self.mask, (display_frame_copy.shape[1], display_frame_copy.shape[0])
+            )
+            display_frame_copy[display_mask == 0] = [0, 0, 0]  # Black for masked area
 
         if self.draw_quad_mode and self.quad_points:
             # This part is tricky because QPainter works on QPixmap/QImage, not numpy array directly.
@@ -179,17 +214,19 @@ class Annotator(QMainWindow):
 
         h, w, ch = display_frame_copy.shape
         bytes_per_line = ch * w
-        q_img = QImage(display_frame_copy.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+        q_img = QImage(
+            display_frame_copy.data, w, h, bytes_per_line, QImage.Format.Format_BGR888
+        )
         pixmap = QPixmap.fromImage(q_img)
 
         if self.draw_quad_mode and self.quad_points:
             painter = QPainter(pixmap)
-            pen = QPen(QColor(255, 0, 0), 2) # Red pen
+            pen = QPen(QColor(255, 0, 0), 2)  # Red pen
             painter.setPen(pen)
             for point in self.quad_points:
                 painter.drawEllipse(point, 3, 3)
             if len(self.quad_points) == 4:
-                 for i in range(4):
+                for i in range(4):
                     painter.drawLine(self.quad_points[i], self.quad_points[(i + 1) % 4])
             painter.end()
 
@@ -201,7 +238,10 @@ class Annotator(QMainWindow):
         super().resizeEvent(event)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.display_frame is not None:
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.display_frame is not None
+        ):
             if self.draw_quad_mode:
                 label_pos = self.image_label.pos()
                 point = event.pos() - label_pos
@@ -220,14 +260,20 @@ class Annotator(QMainWindow):
 
         pixmap = self.image_label.pixmap().copy()
         painter = QPainter(pixmap)
-        pen = QPen(QColor(255, 0, 0), 2) # Red pen
+        pen = QPen(QColor(255, 0, 0), 2)  # Red pen
         painter.setPen(pen)
 
         for i in range(4):
             painter.drawLine(self.quad_points[i], self.quad_points[(i + 1) % 4])
 
         # Calculate area
-        scaled_points = np.array([(p.x() / self.scale_factor, p.y() / self.scale_factor) for p in self.quad_points], dtype=np.float32)
+        scaled_points = np.array(
+            [
+                (p.x() / self.scale_factor, p.y() / self.scale_factor)
+                for p in self.quad_points
+            ],
+            dtype=np.float32,
+        )
         area = cv2.contourArea(scaled_points)
 
         # Display area
@@ -242,11 +288,21 @@ class Annotator(QMainWindow):
 
         self.image_label.setPixmap(pixmap)
 
-
     def mouseMoveEvent(self, event):
-        if event.buttons() and Qt.MouseButton.LeftButton and self.drawing and self.display_frame is not None:
+        if (
+            event.buttons()
+            and Qt.MouseButton.LeftButton
+            and self.drawing
+            and self.display_frame is not None
+        ):
             painter = QPainter(self.image_label.pixmap())
-            pen = QPen(QColor(0,0,0), self.brush_size_slider.value(), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            pen = QPen(
+                QColor(0, 0, 0),
+                self.brush_size_slider.value(),
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+                Qt.PenJoinStyle.RoundJoin,
+            )
             painter.setPen(pen)
 
             # Adjust for image label position
@@ -261,7 +317,13 @@ class Annotator(QMainWindow):
             if self.image_label.pixmap():
                 pixmap = self.image_label.pixmap()
                 painter = QPainter(pixmap)
-                pen = QPen(QColor(0,0,0), self.brush_size_slider.value(), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+                pen = QPen(
+                    QColor(0, 0, 0),
+                    self.brush_size_slider.value(),
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
                 painter.setPen(pen)
 
                 label_pos = self.image_label.pos()
@@ -277,8 +339,13 @@ class Annotator(QMainWindow):
                 scaled_current_point_x = int(current_point.x() / self.scale_factor)
                 scaled_current_point_y = int(current_point.y() / self.scale_factor)
 
-                cv2.line(self.mask, (scaled_last_point_x, scaled_last_point_y), (scaled_current_point_x, scaled_current_point_y), 0, int(self.brush_size_slider.value() / self.scale_factor))
-
+                cv2.line(
+                    self.mask,
+                    (scaled_last_point_x, scaled_last_point_y),
+                    (scaled_current_point_x, scaled_current_point_y),
+                    0,
+                    int(self.brush_size_slider.value() / self.scale_factor),
+                )
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -286,7 +353,7 @@ class Annotator(QMainWindow):
             self.update_display()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     annotator = Annotator()
     annotator.show()
