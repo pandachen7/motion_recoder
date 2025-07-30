@@ -1,5 +1,6 @@
 # 來源
-source: rtsp://user:password@ip:port/stream
+# source: rtsp://user:password@ip:port/stream
+source: C:\Users\marcy\Downloads\drive-download-20250714T120222Z-1-001\1140328\C203_230304_003917_04_0.mp4
 video_fps: 10
 
 # 過濾相關
@@ -13,9 +14,9 @@ motion_area_threshold: 500
 # 錄影相關, 如果x264太吃力, 就改回XVID
 output_path: ./recordings
 record_seconds: 30
-fourcc: x264
-# fourcc: XVID
+# fourcc: x264
+fourcc: XVID
 
 # 是否show影像, 只適合一開始做測試
-imshow: false
+imshow: true
 

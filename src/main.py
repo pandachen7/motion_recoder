@@ -5,17 +5,20 @@ from datetime import datetime
 
 import cv2
 import numpy as np
-import yaml
+from ruamel.yaml import YAML
 
 from loglo import getUniqueLogger
 
 log = getUniqueLogger(__file__)
+yaml = YAML()
 
 
 class MotionDetector:
     def __init__(self, config_path="./cfg/config.yaml"):
-        with open(config_path, "r") as f:
-            self.config = yaml.safe_load(f)
+        with open(config_path, encoding="utf-8") as f:
+            self.config = yaml.load(f)
+
+        self.loaded = False
 
         self.video_source = self.config["source"]
         self.video_fps = self.config.get("video_fps", 20)
@@ -34,10 +37,11 @@ class MotionDetector:
 
         if not os.path.exists(self.output_path):
             try:
-                os.makedirs(self.output_path)
+                os.makedirs(self.output_path, exist_ok=True)
             except OSError:
-                log.d("Could not create output directory. use `./out` instead.")
-                self.output_path = "./out"
+                log.d("Could not create output directory. use `./recordings` instead.")
+                self.output_path = "./recordings"
+                os.makedirs(self.output_path, exist_ok=True)
 
         self.cap = cv2.VideoCapture(self.video_source)
         if not self.cap.isOpened():
@@ -49,11 +53,13 @@ class MotionDetector:
 
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        log.d(f"fps: {self.fps}, width: {self.width}, height: {self.height}")
 
         self.mask = None
         if self.mask_path and os.path.exists(self.mask_path):
             self.mask = cv2.imread(self.mask_path, cv2.IMREAD_GRAYSCALE)
             self.mask = cv2.resize(self.mask, (self.width, self.height))
+            log.d("load mask successfully")
 
         self.frame_buffer = []
         self.background = None
@@ -63,28 +69,38 @@ class MotionDetector:
 
         self.latest_frame = None
         self.lock = threading.Lock()
-        self.thread = threading.Thread(target=self._frame_reader, daemon=True)
-        self.thread.start()
+        if self.video_type == "stream":
+            # self.latest_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+            self.thread = threading.Thread(target=self._frame_reader, daemon=True)
+            self.thread.start()
 
     def _frame_reader(self):
         while True:
             ret, frame = self.cap.read()
             if not ret:
-                if self.video_type == "file":
-                    break
-                else:
-                    continue
+                continue
             with self.lock:
                 self.latest_frame = frame
-        self.cap.release()
+
+    def toNextFrame(self):
+        if self.video_type == "file":
+            ret, frame = self.cap.read()
+            if ret:
+                self.latest_frame = frame
+            else:
+                self.latest_frame = None
 
     def run(self):
         last_sample_time = time.time()
 
         while True:
+            self.toNextFrame()
             with self.lock:
                 if self.latest_frame is None:
-                    continue
+                    if self.video_type == "stream":
+                        continue
+                    else:
+                        break
                 frame = self.latest_frame.copy()
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -137,23 +153,24 @@ class MotionDetector:
                 break
 
         self.stop_recording()
+        self.cap.release()
         if self.imshow_enabled:
             cv2.destroyAllWindows()
 
     def start_recording(self):
         self.is_recording = True
         now = datetime.now()
-        date_path = now.strftime("%Y/%m/%d")
+        date_path = now.strftime("%Y_%m_%d")
         output_dir = os.path.join(self.output_path, date_path)
         os.makedirs(output_dir, exist_ok=True)
 
-        time_str = now.strftime("%H-%M-%S")
+        time_str = now.strftime("%H_%M_%S")
         filename = os.path.join(output_dir, f"{time_str}.avi")
         # fourcc = cv2.VideoWriter_fourcc(*"XVID")
         self.video_writer = cv2.VideoWriter(
             filename, self.fourcc, self.fps, (self.width, self.height)
         )
-        print(f"Started recording: {filename}")
+        log.i(f"Started recording: {filename}")
 
     def stop_recording(self):
         if self.is_recording:
@@ -161,7 +178,7 @@ class MotionDetector:
             if self.video_writer is not None:
                 self.video_writer.release()
                 self.video_writer = None
-                print("Stopped recording.")
+                log.i("Stopped recording.")
 
 
 if __name__ == "__main__":
