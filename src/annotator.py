@@ -412,6 +412,7 @@ class Annotator(QMainWindow):
         )
         area = cv2.contourArea(scaled_points)
         self._display_quad_area(area, painter, pixmap)
+        painter.end()
 
     def _display_quad_area(self, area, painter, pixmap):
         # Display area
@@ -443,61 +444,35 @@ class Annotator(QMainWindow):
                 self.area_bbox[1] = event.pos()
                 self.update_display()
             elif self.brush_action.isChecked() or self.erase_action.isChecked():
-                color = 0 if self.brush_action.isChecked() else 255
-                log.d(f"color: {color}")
-                painter = QPainter(self.image_label.pixmap())
+                if not self.image_label.pixmap():
+                    return
+                pixmap = self.image_label.pixmap()
+                painter = QPainter(pixmap)
+                color = (
+                    QColor(0, 0, 0)
+                    if self.brush_action.isChecked()
+                    else QColor(255, 255, 255)
+                )
                 pen = QPen(
-                    (
-                        QColor(0, 0, 0)
-                        if self.brush_action.isChecked()
-                        else QColor(255, 255, 255)
-                    ),
+                    color,
                     self.brush_size_slider.value(),
                     Qt.PenStyle.SolidLine,
                     Qt.PenCapStyle.RoundCap,
                     Qt.PenJoinStyle.RoundJoin,
                 )
                 painter.setPen(pen)
-
-                # Adjust for image label position
-                label_pos = self.image_label.pos()
-                current_point = event.pos() - label_pos
-                last_point = self.last_point - label_pos
-
-                painter.drawLine(last_point, current_point)
-                self.last_point = event.pos()
-
-                # Update the mask by drawing on a temporary pixmap and then onto the mask
-                if self.image_label.pixmap():
-                    pixmap = self.image_label.pixmap()
-                    log.d(f"pixmap size: {pixmap.size()}")
-                    painter = QPainter(pixmap)
-                    pen = QPen(
-                        (
-                            QColor(0, 0, 0)
-                            if self.brush_action.isChecked()
-                            else QColor(255, 255, 255)
-                        ),
-                        self.brush_size_slider.value(),
-                        Qt.PenStyle.SolidLine,
-                        Qt.PenCapStyle.RoundCap,
-                        Qt.PenJoinStyle.RoundJoin,
-                    )
-                    painter.setPen(pen)
-
                 label_pos = self.image_label.pos()
                 current_point = event.pos() - label_pos
                 last_point = self.last_point - label_pos
                 painter.drawLine(last_point, current_point)
-                self.last_point = event.pos()
+                painter.end()
                 self.image_label.setPixmap(pixmap)
-
-                # Update the actual mask
+                self.last_point = event.pos()
+                color = 0 if self.brush_action.isChecked() else 255
                 scaled_last_point_x = int(last_point.x() / self.scale_factor)
                 scaled_last_point_y = int(last_point.y() / self.scale_factor)
                 scaled_current_point_x = int(current_point.x() / self.scale_factor)
                 scaled_current_point_y = int(current_point.y() / self.scale_factor)
-
                 cv2.line(
                     self.mask,
                     (scaled_last_point_x, scaled_last_point_y),
