@@ -18,6 +18,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from loglo import getUniqueLogger
+
+log = getUniqueLogger(__file__)
+
 
 class Annotator(QMainWindow):
     def __init__(self):
@@ -57,23 +61,25 @@ class Annotator(QMainWindow):
 
         self.toolbar.addSeparator()
 
-        self.brush_action = QAction(QIcon.fromTheme("draw-freehand"), "", self)
+        self.brush_action = QAction(QIcon.fromTheme("draw-freehand"), "Brush", self)
         self.brush_action.setCheckable(True)
         self.brush_action.setChecked(True)
         self.toolbar.addAction(self.brush_action)
         self.brush_action.setToolTip("Brush")
 
-        self.erase_action = QAction(QIcon.fromTheme("draw-eraser"), "", self)
+        self.erase_action = QAction(QIcon.fromTheme("draw-eraser"), "Erase", self)
         self.erase_action.setCheckable(True)
         self.toolbar.addAction(self.erase_action)
         self.erase_action.setToolTip("Erase")
 
-        self.fill_action = QAction(QIcon.fromTheme("color-fill"), "", self)
+        self.fill_action = QAction(QIcon.fromTheme("color-fill"), "Fill", self)
         self.fill_action.triggered.connect(self.fill_mask)
         self.toolbar.addAction(self.fill_action)
         self.fill_action.setToolTip("Fill")
 
-        self.draw_quad_action = QAction(QIcon.fromTheme("draw-polygon"), "", self)
+        self.draw_quad_action = QAction(
+            QIcon.fromTheme("draw-polygon"), "Draw Quad", self
+        )
         self.draw_quad_action.setCheckable(True)
         self.draw_quad_action.toggled.connect(self.toggle_draw_quad_mode)
         self.toolbar.addAction(self.draw_quad_action)
@@ -105,13 +111,13 @@ class Annotator(QMainWindow):
         self.save_mask_action.triggered.connect(self.save_mask)
         self.toolbar.addAction(self.save_mask_action)
 
-        self.save_annotations_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton),
-            "Save Annotations",
-            self,
-        )
-        self.save_annotations_action.triggered.connect(self.save_annotations)
-        self.toolbar.addAction(self.save_annotations_action)
+        # self.save_annotations_action = QAction(
+        #     style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton),
+        #     "Save Annotations",
+        #     self,
+        # )
+        # self.save_annotations_action.triggered.connect(self.save_annotations)
+        # self.toolbar.addAction(self.save_annotations_action)
 
         # Brush size slider in a container to add to toolbar
         slider_container = QWidget()
@@ -141,6 +147,10 @@ class Annotator(QMainWindow):
         self.current_bbox = None
         self.draw_area_mode = False
         self.area_bbox = None
+
+        # for test
+        self.source_path = "./img/mask.png"
+        self.process_source()
 
     def toggle_brush_mode(self, checked):
         if checked:
@@ -195,47 +205,49 @@ class Annotator(QMainWindow):
                 "Save Mask File",
                 "",
                 "PNG Files (*.png)",
-                options=QFileDialog.DontUseNativeDialog,
+                options=QFileDialog.Option.DontUseNativeDialog,
             )
             if fileName:
                 # Invert mask so drawing is black and background is white
                 inverted_mask = cv2.bitwise_not(self.mask)
                 cv2.imwrite(fileName, inverted_mask)
 
-    def save_annotations(self):
-        if not self.bboxes and self.mask is None:
-            return
+    # def save_annotations(self):
+    #     if not self.bboxes and self.mask is None:
+    #         return
 
-        fileName, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Annotations",
-            "",
-            "All Files (*)",
-            options=QFileDialog.DontUseNativeDialog,
-        )
+    #     fileName, _ = QFileDialog.getSaveFileName(
+    #         self,
+    #         "Save Annotations",
+    #         "",
+    #         "All Files (*)",
+    #         options=QFileDialog.DontUseNativeDialog,
+    #     )
 
-        if fileName:
-            if self.bboxes:
-                with open(f"{fileName}_bbox.txt", "w") as f:
-                    for bbox in self.bboxes:
-                        p1 = bbox[0] - self.image_label.pos()
-                        p2 = bbox[1] - self.image_label.pos()
-                        x1 = p1.x() / self.scale_factor
-                        y1 = p1.y() / self.scale_factor
-                        x2 = p2.x() / self.scale_factor
-                        y2 = p2.y() / self.scale_factor
-                        f.write(f"{x1},{y1},{x2},{y2}\n")
-            if self.mask is not None:
-                inverted_mask = cv2.bitwise_not(self.mask)
-                cv2.imwrite(f"{fileName}_mask.png", inverted_mask)
+    #     if fileName:
+    #         if self.bboxes:
+    #             with open(f"{fileName}_bbox.txt", "w") as f:
+    #                 for bbox in self.bboxes:
+    #                     p1 = bbox[0] - self.image_label.pos()
+    #                     p2 = bbox[1] - self.image_label.pos()
+    #                     x1 = p1.x() / self.scale_factor
+    #                     y1 = p1.y() / self.scale_factor
+    #                     x2 = p2.x() / self.scale_factor
+    #                     y2 = p2.y() / self.scale_factor
+    #                     f.write(f"{x1},{y1},{x2},{y2}\n")
+    #         if self.mask is not None:
+    #             inverted_mask = cv2.bitwise_not(self.mask)
+    #             cv2.imwrite(f"{fileName}_mask.png", inverted_mask)
 
     def load_file(self):
+        options = QFileDialog.Option.DontUseNativeDialog
+
         fileName, _ = QFileDialog.getOpenFileName(
             self,
             "Open Image or Video File",
             "",
             "All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)",
-            options=QFileDialog.DontUseNativeDialog,
+            options=options,
         )
         if fileName:
             self.source_path = fileName
@@ -328,7 +340,7 @@ class Annotator(QMainWindow):
             display_frame_copy.data, w, h, bytes_per_line, QImage.Format.Format_BGR888
         )
         pixmap = QPixmap.fromImage(q_img)
-
+        log.d(f"pixmap size: {pixmap.size()}")
         if self.draw_quad_mode and self.quad_points:
             painter = QPainter(pixmap)
             pen = QPen(QColor(255, 0, 0), 2)  # Red pen
@@ -339,13 +351,14 @@ class Annotator(QMainWindow):
                 for i in range(4):
                     painter.drawLine(self.quad_points[i], self.quad_points[(i + 1) % 4])
             painter.end()
-
+        log.d("t1")
         if self.draw_bbox_mode or self.bboxes:
             painter = QPainter(pixmap)
             self.draw_bboxes(painter)
             painter.end()
-
+        log.d("t2")
         self.image_label.setPixmap(pixmap)
+        log.d("t3")
 
     def resizeEvent(self, event):
         self.resize_frame()
@@ -380,6 +393,7 @@ class Annotator(QMainWindow):
         if len(self.quad_points) < 4:
             return
 
+        log.d("draw_quad_and_area")
         # pixmap = self.image_label.pixmap().copy()
         painter = QPainter(pixmap)
         pen = QPen(QColor(255, 0, 0), 2)  # Red pen
@@ -430,6 +444,7 @@ class Annotator(QMainWindow):
                 self.update_display()
             elif self.brush_action.isChecked() or self.erase_action.isChecked():
                 color = 0 if self.brush_action.isChecked() else 255
+                log.d(f"color: {color}")
                 painter = QPainter(self.image_label.pixmap())
                 pen = QPen(
                     (
@@ -455,6 +470,7 @@ class Annotator(QMainWindow):
                 # Update the mask by drawing on a temporary pixmap and then onto the mask
                 if self.image_label.pixmap():
                     pixmap = self.image_label.pixmap()
+                    log.d(f"pixmap size: {pixmap.size()}")
                     painter = QPainter(pixmap)
                     pen = QPen(
                         (
