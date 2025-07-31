@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QSlider,
+    QStyle,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -41,47 +42,58 @@ class Annotator(QMainWindow):
         # --- Actions ---
         style = self.style()
         self.load_file_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Open File", self
+            QIcon.fromTheme("document-open"), "Open File", self
         )
         self.load_file_action.triggered.connect(self.load_file)
         self.toolbar.addAction(self.load_file_action)
+        self.load_file_action.setToolTip("Open File")
 
         self.load_rtsp_action = QAction(
-            style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon), "Open RTSP", self
+            QIcon.fromTheme("network-wired"), "Open RTSP", self
         )
         self.load_rtsp_action.triggered.connect(self.load_rtsp)
         self.toolbar.addAction(self.load_rtsp_action)
+        self.load_rtsp_action.setToolTip("Open RTSP")
 
         self.toolbar.addSeparator()
 
-        self.brush_action = QAction(QIcon.fromTheme("draw-freehand"), "Brush", self)
+        self.brush_action = QAction(QIcon.fromTheme("draw-freehand"), "", self)
         self.brush_action.setCheckable(True)
         self.brush_action.setChecked(True)
         self.toolbar.addAction(self.brush_action)
+        self.brush_action.setToolTip("Brush")
 
-        self.erase_action = QAction(QIcon.fromTheme("draw-eraser"), "Erase", self)
+        self.erase_action = QAction(QIcon.fromTheme("draw-eraser"), "", self)
         self.erase_action.setCheckable(True)
         self.toolbar.addAction(self.erase_action)
+        self.erase_action.setToolTip("Erase")
 
-        self.fill_action = QAction(QIcon.fromTheme("color-fill"), "Fill", self)
+        self.fill_action = QAction(QIcon.fromTheme("color-fill"), "", self)
         self.fill_action.triggered.connect(self.fill_mask)
         self.toolbar.addAction(self.fill_action)
+        self.fill_action.setToolTip("Fill")
 
-        self.draw_quad_action = QAction(
-            QIcon.fromTheme("draw-polygon"), "Draw Quad", self
-        )
+        self.draw_quad_action = QAction(QIcon.fromTheme("draw-polygon"), "", self)
         self.draw_quad_action.setCheckable(True)
         self.draw_quad_action.toggled.connect(self.toggle_draw_quad_mode)
         self.toolbar.addAction(self.draw_quad_action)
+        self.draw_quad_action.setToolTip("Draw Quad")
 
-        self.draw_bbox_action = QAction(
-            QIcon.fromTheme("draw-rectangle"), "Draw Bbox", self
-        )
+        self.draw_bbox_action = QAction(QIcon.fromTheme("draw-rectangle"), "", self)
         self.draw_bbox_action.setCheckable(True)
         self.brush_action.toggled.connect(self.toggle_brush_mode)
         self.erase_action.toggled.connect(self.toggle_erase_mode)
         self.draw_bbox_action.toggled.connect(self.toggle_draw_bbox_mode)
         self.toolbar.addAction(self.draw_bbox_action)
+        self.draw_bbox_action.setToolTip("Draw Bbox")
+
+        self.draw_area_action = QAction(
+            QIcon.fromTheme("draw-rectangle"), "Draw Area", self
+        )
+        self.draw_area_action.setIcon(QIcon.fromTheme("draw-rectangle"))
+        self.draw_area_action.setCheckable(True)
+        self.draw_area_action.toggled.connect(self.toggle_draw_area_mode)
+        self.toolbar.addAction(self.draw_area_action)
 
         self.toolbar.addSeparator()
 
@@ -127,6 +139,8 @@ class Annotator(QMainWindow):
         self.draw_bbox_mode = False
         self.bboxes = []
         self.current_bbox = None
+        self.draw_area_mode = False
+        self.area_bbox = None
 
     def toggle_brush_mode(self, checked):
         if checked:
@@ -146,6 +160,7 @@ class Annotator(QMainWindow):
             self.draw_quad_action.setChecked(False)
             self.brush_action.setChecked(False)
             self.erase_action.setChecked(False)
+            self.draw_area_action.setChecked(False)
 
     def toggle_draw_quad_mode(self, checked):
         self.draw_quad_mode = checked
@@ -157,6 +172,14 @@ class Annotator(QMainWindow):
             self.quad_points = []  # Reset points when mode is turned off
             self.update_display()  # Remove any drawn quad
 
+    def toggle_draw_area_mode(self, checked):
+        self.draw_area_mode = checked
+        if checked:
+            self.draw_quad_action.setChecked(False)
+            self.brush_action.setChecked(False)
+            self.erase_action.setChecked(False)
+            self.draw_bbox_action.setChecked(False)
+
     def update_brush_size_label(self):
         self.brush_size_label.setText(f"Brush: {self.brush_size_slider.value()}")
 
@@ -167,9 +190,12 @@ class Annotator(QMainWindow):
 
     def save_mask(self):
         if self.mask is not None:
-            options = QFileDialog.Options()
             fileName, _ = QFileDialog.getSaveFileName(
-                self, "Save Mask File", "", "PNG Files (*.png)", options=options
+                self,
+                "Save Mask File",
+                "",
+                "PNG Files (*.png)",
+                options=QFileDialog.DontUseNativeDialog,
             )
             if fileName:
                 # Invert mask so drawing is black and background is white
@@ -180,13 +206,12 @@ class Annotator(QMainWindow):
         if not self.bboxes and self.mask is None:
             return
 
-        options = QFileDialog.Options()
         fileName, _ = QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
             "",
             "All Files (*)",
-            options=options,
+            options=QFileDialog.DontUseNativeDialog,
         )
 
         if fileName:
@@ -205,13 +230,12 @@ class Annotator(QMainWindow):
                 cv2.imwrite(f"{fileName}_mask.png", inverted_mask)
 
     def load_file(self):
-        options = QFileDialog.Options()
         fileName, _ = QFileDialog.getOpenFileName(
             self,
             "Open Image or Video File",
             "",
             "All Files (*);;Image Files (*.png *.jpg *.jpeg);;Video Files (*.mp4 *.avi)",
-            options=options,
+            options=QFileDialog.DontUseNativeDialog,
         )
         if fileName:
             self.source_path = fileName
@@ -224,6 +248,9 @@ class Annotator(QMainWindow):
             self.process_source()
 
     def process_source(self):
+        self._process_source()
+
+    def _process_source(self):
         if self.source_path.lower().endswith((".png", ".jpg", ".jpeg")):
             self.original_frame = cv2.imread(self.source_path)
         else:
@@ -253,6 +280,9 @@ class Annotator(QMainWindow):
         self.update_display()
 
     def resize_frame(self):
+        self._resize_frame()
+
+    def _resize_frame(self):
         if self.original_frame is None:
             return
 
@@ -265,12 +295,15 @@ class Annotator(QMainWindow):
             scale_w = screen_w / w
             self.scale_factor = min(scale_h, scale_w)
 
-            new_w = int(w * self.scale_factor)
-            new_h = int(h * self.scale_factor)
+        new_w = int(w * self.scale_factor)
+        new_h = int(h * self.scale_factor)
 
-            self.display_frame = cv2.resize(self.original_frame, (new_w, new_h))
+        self.display_frame = cv2.resize(self.original_frame, (new_w, new_h))
 
     def update_display(self):
+        self._update_display()
+
+    def _update_display(self):
         if self.display_frame is None:
             return
 
@@ -331,19 +364,23 @@ class Annotator(QMainWindow):
                 if len(self.quad_points) <= 4:
                     self.update_display()
                 if len(self.quad_points) == 4:
-                    self.draw_quad_and_area()
+                    pixmap = self.image_label.pixmap().copy()
+                    self.draw_quad_and_area(pixmap)
             elif self.draw_bbox_mode:
                 self.drawing = True
                 self.current_bbox = [event.pos(), event.pos()]
+            elif self.draw_area_mode:
+                self.drawing = True
+                self.area_bbox = [event.pos(), event.pos()]
             else:
                 self.drawing = True
                 self.last_point = event.pos()
 
-    def draw_quad_and_area(self):
+    def draw_quad_and_area(self, pixmap):
         if len(self.quad_points) < 4:
             return
 
-        pixmap = self.image_label.pixmap().copy()
+        # pixmap = self.image_label.pixmap().copy()
         painter = QPainter(pixmap)
         pen = QPen(QColor(255, 0, 0), 2)  # Red pen
         painter.setPen(pen)
@@ -360,7 +397,9 @@ class Annotator(QMainWindow):
             dtype=np.float32,
         )
         area = cv2.contourArea(scaled_points)
+        self._display_quad_area(area, painter, pixmap)
 
+    def _display_quad_area(self, area, painter, pixmap):
         # Display area
         area_text = f"Area: {area:.2f}"
         font = painter.font()
@@ -374,6 +413,9 @@ class Annotator(QMainWindow):
         self.image_label.setPixmap(pixmap)
 
     def mouseMoveEvent(self, event):
+        self._mouseMoveEvent(event)
+
+    def _mouseMoveEvent(self, event):
         if (
             event.buttons()
             and Qt.MouseButton.LeftButton
@@ -383,11 +425,18 @@ class Annotator(QMainWindow):
             if self.draw_bbox_mode:
                 self.current_bbox[1] = event.pos()
                 self.update_display()
+            elif self.draw_area_mode:
+                self.area_bbox[1] = event.pos()
+                self.update_display()
             elif self.brush_action.isChecked() or self.erase_action.isChecked():
                 color = 0 if self.brush_action.isChecked() else 255
                 painter = QPainter(self.image_label.pixmap())
                 pen = QPen(
-                    QColor(0, 0, 0) if self.brush_action.isChecked() else QColor(255, 255, 255),
+                    (
+                        QColor(0, 0, 0)
+                        if self.brush_action.isChecked()
+                        else QColor(255, 255, 255)
+                    ),
                     self.brush_size_slider.value(),
                     Qt.PenStyle.SolidLine,
                     Qt.PenCapStyle.RoundCap,
@@ -408,7 +457,11 @@ class Annotator(QMainWindow):
                     pixmap = self.image_label.pixmap()
                     painter = QPainter(pixmap)
                     pen = QPen(
-                        QColor(0, 0, 0) if self.brush_action.isChecked() else QColor(255, 255, 255),
+                        (
+                            QColor(0, 0, 0)
+                            if self.brush_action.isChecked()
+                            else QColor(255, 255, 255)
+                        ),
                         self.brush_size_slider.value(),
                         Qt.PenStyle.SolidLine,
                         Qt.PenCapStyle.RoundCap,
@@ -416,30 +469,26 @@ class Annotator(QMainWindow):
                     )
                     painter.setPen(pen)
 
-                    label_pos = self.image_label.pos()
-                    current_point = event.pos() - label_pos
-                    last_point = self.last_point - label_pos
-                    painter.drawLine(last_point, current_point)
-                    self.last_point = event.pos()
-                    self.image_label.setPixmap(pixmap)
+                label_pos = self.image_label.pos()
+                current_point = event.pos() - label_pos
+                last_point = self.last_point - label_pos
+                painter.drawLine(last_point, current_point)
+                self.last_point = event.pos()
+                self.image_label.setPixmap(pixmap)
 
-                    # Update the actual mask
-                    scaled_last_point_x = int(last_point.x() / self.scale_factor)
-                    scaled_last_point_y = int(last_point.y() / self.scale_factor)
-                    scaled_current_point_x = int(
-                        current_point.x() / self.scale_factor
-                    )
-                    scaled_current_point_y = int(
-                        current_point.y() / self.scale_factor
-                    )
+                # Update the actual mask
+                scaled_last_point_x = int(last_point.x() / self.scale_factor)
+                scaled_last_point_y = int(last_point.y() / self.scale_factor)
+                scaled_current_point_x = int(current_point.x() / self.scale_factor)
+                scaled_current_point_y = int(current_point.y() / self.scale_factor)
 
-                    cv2.line(
-                        self.mask,
-                        (scaled_last_point_x, scaled_last_point_y),
-                        (scaled_current_point_x, scaled_current_point_y),
-                        color,
-                        int(self.brush_size_slider.value() / self.scale_factor),
-                    )
+                cv2.line(
+                    self.mask,
+                    (scaled_last_point_x, scaled_last_point_y),
+                    (scaled_current_point_x, scaled_current_point_y),
+                    color,
+                    int(self.brush_size_slider.value() / self.scale_factor),
+                )
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -447,6 +496,8 @@ class Annotator(QMainWindow):
                 self.drawing = False
                 self.bboxes.append(self.current_bbox)
                 self.current_bbox = None
+            elif self.draw_area_mode:
+                self.drawing = False
             else:
                 self.drawing = False
             self.update_display()
@@ -462,6 +513,22 @@ class Annotator(QMainWindow):
             p1 = self.current_bbox[0] - self.image_label.pos()
             p2 = self.current_bbox[1] - self.image_label.pos()
             painter.drawRect(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y())
+        if self.area_bbox:
+            p1 = self.area_bbox[0] - self.image_label.pos()
+            p2 = self.area_bbox[1] - self.image_label.pos()
+            painter.drawRect(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y())
+            self.calculate_area(p1, p2, painter)
+
+    def calculate_area(self, p1, p2, painter):
+        width = abs(p2.x() - p1.x()) / self.scale_factor
+        height = abs(p2.y() - p1.y()) / self.scale_factor
+        area = width * height
+        area_text = f"Area: {area:.2f}"
+        font = painter.font()
+        font.setPointSize(12)
+        painter.setFont(font)
+        text_pos = QPoint(p2.x(), p2.y() - 10)
+        painter.drawText(text_pos.x(), text_pos.y() - 10, area_text)
 
 
 if __name__ == "__main__":
