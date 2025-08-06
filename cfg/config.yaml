@@ -13,7 +13,7 @@ motion_area_threshold: 500
 
 # 錄影相關, 如果x264太吃力, 就改回XVID
 output_path: ./recordings
-record_seconds: 30
+record_seconds: 5
 # fourcc: x264
 fourcc: XVID
 
