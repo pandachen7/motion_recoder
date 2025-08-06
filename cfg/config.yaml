@@ -20,3 +20,13 @@ fourcc: XVID
 # 是否show影像, 只適合一開始做測試
 imshow: true
 
+
+# 排程錄影
+schedule:
+  enabled: false
+  start_time:
+    hour: 8
+    minute: 0
+  end_time:
+    hour: 20
+    minute: 0

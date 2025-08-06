@@ -30,6 +30,7 @@ class MotionDetector:
         self.imshow_enabled = self.config["imshow"]
         self.record_seconds = self.config.get("record_seconds", 5)
         self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
+        self.schedule_config = self.config.get("schedule", {})
 
         if self.sample_per_second < 1:
             self.sample_per_second = 1
@@ -114,10 +115,30 @@ class MotionDetector:
             else:
                 self.latest_frame = None
 
+    def _is_in_schedule(self):
+        if not self.schedule_config.get("enabled", False):
+            return True
+
+        now = datetime.now().time()
+        start_time_conf = self.schedule_config.get("start_time", {"hour": 0, "minute": 0})
+        end_time_conf = self.schedule_config.get("end_time", {"hour": 23, "minute": 59})
+
+        start_time = now.replace(hour=start_time_conf["hour"], minute=start_time_conf["minute"], second=0, microsecond=0)
+        end_time = now.replace(hour=end_time_conf["hour"], minute=end_time_conf["minute"], second=59, microsecond=999999)
+
+        return start_time <= now <= end_time
+
     def run(self):
         last_sample_time = time.time()
 
         while True:
+            if not self._is_in_schedule():
+                if self.is_recording:
+                    log.i("duty off")
+                    self.stop_recording()
+                time.sleep(60)  # 不在排程內
+                continue
+
             self.toNextFrame()
             with self.lock:
                 if self.latest_frame is None:
