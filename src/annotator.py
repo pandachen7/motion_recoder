@@ -73,7 +73,8 @@ class Annotator(QMainWindow):
         self.erase_action.setToolTip("Erase")
 
         self.fill_action = QAction(QIcon.fromTheme("color-fill"), "Fill", self)
-        self.fill_action.triggered.connect(self.fill_mask)
+        self.fill_action.setCheckable(True)
+        self.fill_action.toggled.connect(self.toggle_fill_mode)
         self.toolbar.addAction(self.fill_action)
         self.fill_action.setToolTip("Fill")
 
@@ -147,6 +148,7 @@ class Annotator(QMainWindow):
         self.current_bbox = None
         self.draw_area_mode = False
         self.area_bbox = None
+        self.fill_mode = False
 
         # for test
         self.source_path = "./img/mask.png"
@@ -157,12 +159,14 @@ class Annotator(QMainWindow):
             self.erase_action.setChecked(False)
             self.draw_quad_action.setChecked(False)
             self.draw_bbox_action.setChecked(False)
+            self.fill_action.setChecked(False)
 
     def toggle_erase_mode(self, checked):
         if checked:
             self.brush_action.setChecked(False)
             self.draw_quad_action.setChecked(False)
             self.draw_bbox_action.setChecked(False)
+            self.fill_action.setChecked(False)
 
     def toggle_draw_bbox_mode(self, checked):
         self.draw_bbox_mode = checked
@@ -171,6 +175,7 @@ class Annotator(QMainWindow):
             self.brush_action.setChecked(False)
             self.erase_action.setChecked(False)
             self.draw_area_action.setChecked(False)
+            self.fill_action.setChecked(False)
 
     def toggle_draw_quad_mode(self, checked):
         self.draw_quad_mode = checked
@@ -178,6 +183,7 @@ class Annotator(QMainWindow):
             self.draw_bbox_mode = False
             self.brush_action.setChecked(False)
             self.erase_action.setChecked(False)
+            self.fill_action.setChecked(False)
         if not checked:
             self.quad_points = []  # Reset points when mode is turned off
             self.update_display()  # Remove any drawn quad
@@ -189,13 +195,30 @@ class Annotator(QMainWindow):
             self.brush_action.setChecked(False)
             self.erase_action.setChecked(False)
             self.draw_bbox_action.setChecked(False)
+            self.fill_action.setChecked(False)
+
+    def toggle_fill_mode(self, checked):
+        self.fill_mode = checked
+        if checked:
+            self.brush_action.setChecked(False)
+            self.erase_action.setChecked(False)
+            self.draw_quad_action.setChecked(False)
+            self.draw_bbox_action.setChecked(False)
+            self.draw_area_action.setChecked(False)
 
     def update_brush_size_label(self):
         self.brush_size_label.setText(f"Brush: {self.brush_size_slider.value()}")
 
-    def fill_mask(self):
+    def fill_mask_at_point(self, point):
         if self.mask is not None:
-            cv2.floodFill(self.mask, None, (0, 0), 0)
+            h, w = self.mask.shape[:2]
+            mask = np.zeros((h + 2, w + 2), np.uint8)
+            seed_point = (point.x(), point.y())
+            if seed_point[0] < 0 or seed_point[0] >= w or seed_point[1] < 0 or seed_point[1] >= h:
+                log.w(f"Fill point {seed_point} is outside of mask dimensions {(w, h)}")
+                return
+            # We fill with black (0)
+            cv2.floodFill(self.mask, mask, seed_point, 0)
             self.update_display()
 
     def save_mask(self):
@@ -360,6 +383,33 @@ class Annotator(QMainWindow):
         self.image_label.setPixmap(pixmap)
         log.d("t3")
 
+    def _map_window_to_image_coords(self, window_pos):
+        if self.image_label.pixmap() is None or self.scale_factor == 0:
+            return None
+
+        # Top-left corner of the label in the window
+        label_rect = self.image_label.geometry()
+
+        # Top-left corner of the pixmap within the label (due to alignment)
+        pixmap_size = self.image_label.pixmap().size()
+        label_size = self.image_label.size()
+
+        pixmap_x_offset = (label_size.width() - pixmap_size.width()) / 2
+        pixmap_y_offset = (label_size.height() - pixmap_size.height()) / 2
+
+        # Mouse position relative to the pixmap
+        pixmap_pos = window_pos - label_rect.topLeft() - QPoint(int(pixmap_x_offset), int(pixmap_y_offset))
+
+        # Check if click is inside the pixmap
+        if not (0 <= pixmap_pos.x() < pixmap_size.width() and 0 <= pixmap_pos.y() < pixmap_size.height()):
+            return None
+
+        # Scale to original image coordinates
+        image_x = pixmap_pos.x() / self.scale_factor
+        image_y = pixmap_pos.y() / self.scale_factor
+
+        return QPoint(int(image_x), int(image_y))
+
     def resizeEvent(self, event):
         self.resize_frame()
         self.update_display()
@@ -370,6 +420,14 @@ class Annotator(QMainWindow):
             event.button() == Qt.MouseButton.LeftButton
             and self.display_frame is not None
         ):
+            if self.fill_mode:
+                image_point = self._map_window_to_image_coords(event.pos())
+                if image_point:
+                    self.fill_mask_at_point(image_point)
+                return
+
+            # The other drawing modes still have the coordinate issue,
+            # but we focus on the mask drawing first as requested.
             if self.draw_quad_mode:
                 label_pos = self.image_label.pos()
                 point = event.pos() - label_pos
@@ -385,9 +443,11 @@ class Annotator(QMainWindow):
             elif self.draw_area_mode:
                 self.drawing = True
                 self.area_bbox = [event.pos(), event.pos()]
-            else:
-                self.drawing = True
-                self.last_point = event.pos()
+            else:  # Brush or erase mode
+                image_point = self._map_window_to_image_coords(event.pos())
+                if image_point:
+                    self.drawing = True
+                    self.last_point = image_point
 
     def draw_quad_and_area(self, pixmap):
         if len(self.quad_points) < 4:
@@ -437,6 +497,8 @@ class Annotator(QMainWindow):
             and self.drawing
             and self.display_frame is not None
         ):
+            # The other drawing modes still have the coordinate issue,
+            # but we focus on the mask drawing first as requested.
             if self.draw_bbox_mode:
                 self.current_bbox[1] = event.pos()
                 self.update_display()
@@ -444,8 +506,14 @@ class Annotator(QMainWindow):
                 self.area_bbox[1] = event.pos()
                 self.update_display()
             elif self.brush_action.isChecked() or self.erase_action.isChecked():
+                current_image_point = self._map_window_to_image_coords(event.pos())
+                if current_image_point is None or self.last_point is None:
+                    return
+
                 if not self.image_label.pixmap():
                     return
+
+                # Draw on display pixmap for immediate feedback
                 pixmap = self.image_label.pixmap()
                 painter = QPainter(pixmap)
                 color = (
@@ -461,25 +529,27 @@ class Annotator(QMainWindow):
                     Qt.PenJoinStyle.RoundJoin,
                 )
                 painter.setPen(pen)
-                label_pos = self.image_label.pos()
-                current_point = event.pos() - label_pos
-                last_point = self.last_point - label_pos
-                painter.drawLine(last_point, current_point)
+
+                # Convert image coords back to scaled pixmap coords for drawing
+                last_pixmap_point = self.last_point * self.scale_factor
+                current_pixmap_point = current_image_point * self.scale_factor
+                painter.drawLine(last_pixmap_point, current_pixmap_point)
                 painter.end()
                 self.image_label.setPixmap(pixmap)
-                self.last_point = event.pos()
-                color = 0 if self.brush_action.isChecked() else 255
-                scaled_last_point_x = int(last_point.x() / self.scale_factor)
-                scaled_last_point_y = int(last_point.y() / self.scale_factor)
-                scaled_current_point_x = int(current_point.x() / self.scale_factor)
-                scaled_current_point_y = int(current_point.y() / self.scale_factor)
+
+                # Draw on the actual mask (full resolution)
+                mask_color = 0 if self.brush_action.isChecked() else 255
+                brush_size_on_mask = max(1, int(self.brush_size_slider.value() / self.scale_factor))
                 cv2.line(
                     self.mask,
-                    (scaled_last_point_x, scaled_last_point_y),
-                    (scaled_current_point_x, scaled_current_point_y),
-                    color,
-                    int(self.brush_size_slider.value() / self.scale_factor),
+                    (self.last_point.x(), self.last_point.y()),
+                    (current_image_point.x(), current_image_point.y()),
+                    mask_color,
+                    brush_size_on_mask,
                 )
+
+                self.last_point = current_image_point
+
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
