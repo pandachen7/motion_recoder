@@ -57,8 +57,32 @@ class MotionDetector:
 
         self.mask = None
         if self.mask_path and os.path.exists(self.mask_path):
-            self.mask = cv2.imread(self.mask_path, cv2.IMREAD_GRAYSCALE)
-            self.mask = cv2.resize(self.mask, (self.width, self.height))
+            # mask = cv2.imread(self.mask_path, cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(self.mask_path, cv2.IMREAD_UNCHANGED)
+            mask = cv2.resize(mask, (self.width, self.height))
+            if len(mask.shape) == 2:
+                # 灰階圖（單通道）, 0 是 mask，其餘為非 mask, 未測試
+                mask = np.where(mask == 0, 0, 255).astype(np.uint8)
+            elif mask.shape[2] == 3:
+                pass
+                # 彩色圖（3通道）
+                black = np.all(mask == [0, 0, 0], axis=2)
+                mask = np.where(black, 0, 255).astype(np.uint8)
+            elif mask.shape[2] == 4:
+                # 含 alpha 的圖（4通道）
+                rgb = mask[:, :, :3]
+                alpha = mask[:, :, 3]
+                black_and_opaque = np.all(rgb == [0, 0, 0], axis=2) & (alpha == 255)
+                fully_transparent = (alpha == 0)
+                mask = np.where(black_and_opaque, 0, 255)
+                mask[fully_transparent] = 255
+                mask = mask.astype(np.uint8)
+            else:
+                raise ValueError(f"Unsupported image shape: {mask.shape}")
+
+            cv2.imshow("Mask", mask)
+            cv2.waitKey(0)
+            self.mask = mask
             log.d("load mask successfully")
 
         self.frame_buffer = []
@@ -131,7 +155,8 @@ class MotionDetector:
 
                 motion_area = 0
                 for contour in contours:
-                    motion_area += cv2.contourArea(contour)
+                    motion_area = max(motion_area, cv2.contourArea(contour))
+                # log.d(motion_area)
 
                 if motion_area > self.motion_area_threshold:
                     self.last_motion_time = time.time()

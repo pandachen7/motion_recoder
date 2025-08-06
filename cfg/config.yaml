@@ -9,7 +9,7 @@ max_buff_frames: 10
 mask_path: ./img/mask.png
 
 # 偵測相關
-motion_area_threshold: 500
+motion_area_threshold: 3000
 
 # 錄影相關, 如果x264太吃力, 就改回XVID
 output_path: ./recordings
