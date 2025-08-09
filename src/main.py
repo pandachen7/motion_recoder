@@ -300,6 +300,7 @@ class MotionDetector:
                 cmd += ["-an"]
             cmd += ["-c:v", "copy", filename]  # 直接copy到檔案
 
+            log.d(f"ffmpeg cmd: {cmd}")
             subprocess.run(cmd)
         elif self.rec_method == "opencv":
             # fourcc = cv2.VideoWriter_fourcc(*"XVID")
