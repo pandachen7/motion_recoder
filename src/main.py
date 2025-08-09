@@ -1,16 +1,27 @@
 import os
+import subprocess
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 import cv2
 import numpy as np
+import psutil
 from ruamel.yaml import YAML
 
 from loglo import getUniqueLogger
 
 log = getUniqueLogger(__file__)
 yaml = YAML()
+
+FORMAT_DATE = "%Y-%m-%d"
+FORMAT_TIME = "%y%m%d_%H%M%S_%f"
+
+
+def getDate():
+    # get 2025-06-12 which means 2025/06/12
+    return datetime.now().strftime(FORMAT_DATE)
 
 
 class MotionDetector:
@@ -21,31 +32,43 @@ class MotionDetector:
         self.loaded = False
 
         self.video_source = self.config["source"]
-        self.video_fps = self.config.get("video_fps", 20)
-        self.motion_area_threshold = self.config["motion_area_threshold"]
-        self.output_path = self.config["output_path"]
+        self.video_fps = self.config.get("video_fps", 30)
         self.sample_per_second = self.config["sample_per_second"]
         self.max_buff_frames = self.config["max_buff_frames"]
         self.mask_path = self.config.get("mask_path")
-        self.imshow_enabled = self.config["imshow"]
-        self.record_seconds = self.config.get("record_seconds", 5)
+
+        self.motion_area_threshold = self.config["motion_area_threshold"]
+
+        self.output_path = "./recordings"
+        self.use_external_hd = self.config.get("use_external_hd", False)
+        self.select_partition_device = self.config.get("select_partition_device", "")
+        self.path_out_external = self.config.get("path_out_external", "")
+        self.path_out_local = self.config.get("path_out_local", "./recordings")
+
+        self.rec_method = self.config.get("rec_method", "opencv")
+        self.rec_audio = self.config.get("rec_audio", False)
+        self.use_hwaccel = self.config.get("use_hwaccel", None)
+        self.record_fps = self.config.get("record_fps", 5)
+        self.record_seconds = self.config.get("record_seconds", 30)
+
         self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
+
+        self.imshow_enabled = self.config["imshow"]
+
         self.schedule_config = self.config.get("schedule", {})
 
         if self.sample_per_second < 1:
             self.sample_per_second = 1
-        if self.video_source == 0 or "://" in self.video_source:
+
+        # rtmp, http沒試過
+        self.ffmpeg_source = self.video_source
+        if self.video_source == 0:
+            self.video_type = "stream"
+            self.ffmpeg_source = "裝置名稱"
+        elif "://" in self.video_source:
             self.video_type = "stream"
         else:
             self.video_type = "file"
-
-        if not os.path.exists(self.output_path):
-            try:
-                os.makedirs(self.output_path, exist_ok=True)
-            except OSError:
-                log.d("Could not create output directory. use `./recordings` instead.")
-                self.output_path = "./recordings"
-                os.makedirs(self.output_path, exist_ok=True)
 
         self.cap = cv2.VideoCapture(self.video_source)
         if not self.cap.isOpened():
@@ -101,6 +124,38 @@ class MotionDetector:
             # self.latest_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
             self.thread = threading.Thread(target=self._frame_reader, daemon=True)
             self.thread.start()
+
+        self._day_now = datetime.now().day - 1
+
+        self._updateFolder()
+
+    def _updateFolder(self):
+        # this is for unified folder
+        if self._day_now != datetime.now().day:
+            self._day_now = datetime.now().day
+            folder_root = self.path_out_local
+            if self.use_external_hd:
+                if self.select_partition_device:
+                    partitions = psutil.disk_partitions()
+                    for p in partitions:
+                        if (
+                            p.device == self.select_partition_device
+                            and Path(p.mountpoint).is_dir()
+                        ):
+                            folder_root = p.mountpoint
+                            break
+                elif self.path_out_external and Path(self.path_out_external).is_dir():
+                    folder_root = self.path_out_external
+                else:
+                    log.warning(
+                        f"no external hard disk detected. use local space `{self.path_out_local}`"
+                    )
+                    folder_root = self.path_out_local
+
+            self.output_path = Path(folder_root, getDate()).as_posix()
+            log.info(f"change folder to {self.output_path}")
+
+        Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
     def _frame_reader(self):
         while True:
@@ -200,7 +255,8 @@ class MotionDetector:
                         self.start_recording()
 
                 if self.is_recording:
-                    self.video_writer.write(frame)
+                    if self.video_writer is not None:
+                        self.video_writer.write(frame)
                     if time.time() - self.last_motion_time > self.record_seconds:
                         self.stop_recording()
 
@@ -220,17 +276,36 @@ class MotionDetector:
 
     def start_recording(self):
         self.is_recording = True
-        now = datetime.now()
-        date_path = now.strftime("%Y_%m_%d")
-        output_dir = os.path.join(self.output_path, date_path)
-        os.makedirs(output_dir, exist_ok=True)
+        self._updateFolder()
+        output_dir = self.output_path
 
+        now = datetime.now()
         time_str = now.strftime("%H_%M_%S")
-        filename = os.path.join(output_dir, f"{time_str}.avi")
-        # fourcc = cv2.VideoWriter_fourcc(*"XVID")
-        self.video_writer = cv2.VideoWriter(
-            filename, self.fourcc, self.fps, (self.width, self.height)
-        )
+        filename = os.path.join(output_dir, f"{time_str}.mp4")
+
+        if self.rec_method == "ffmpeg":
+            cmd = ["ffmpeg"]
+            if self.use_hwaccel == "qsv":
+                # cmd += ["-hwaccel", "qsv", "-c:v", "h264_qsv"]
+                cmd += ["-hwaccel", "qsv"]
+            cmd += [
+                "-i",
+                self.ffmpeg_source,
+                "-preset",
+                "veryfast",
+                # "-r",
+                # str(self.record_fps),
+            ]
+            if not self.rec_audio:
+                cmd += ["-an"]
+            cmd += ["-c:v", "copy", filename]  # 直接copy到檔案
+
+            subprocess.run(cmd)
+        elif self.rec_method == "opencv":
+            # fourcc = cv2.VideoWriter_fourcc(*"XVID")
+            self.video_writer = cv2.VideoWriter(
+                filename, self.fourcc, self.fps, (self.width, self.height)
+            )
         log.i(f"Started recording: {filename}")
 
     def stop_recording(self):
@@ -239,7 +314,7 @@ class MotionDetector:
             if self.video_writer is not None:
                 self.video_writer.release()
                 self.video_writer = None
-                log.i("Stopped recording.")
+            log.i("Stopped recording.")
 
 
 if __name__ == "__main__":
