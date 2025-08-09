@@ -1,7 +1,8 @@
 # 來源
 # source: rtsp://user:password@ip:port/stream
-source: C:\Users\marcy\Downloads\drive-download-20250714T120222Z-1-001\1140328\C203_230304_003917_04_0.mp4
-video_fps: 10
+source: 0
+video_fps: 30
+record_fps: 5
 
 # 過濾相關
 sample_per_second: 1

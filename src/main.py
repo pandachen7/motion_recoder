@@ -34,7 +34,10 @@ class MotionDetector:
 
         if self.sample_per_second < 1:
             self.sample_per_second = 1
-        self.video_type = "stream" if "://" in self.video_source else "file"
+        if self.video_source == 0 or "://" in self.video_source:
+            self.video_type = "stream"
+        else:
+            self.video_type = "file"
 
         if not os.path.exists(self.output_path):
             try:
@@ -74,7 +77,7 @@ class MotionDetector:
                 rgb = mask[:, :, :3]
                 alpha = mask[:, :, 3]
                 black_and_opaque = np.all(rgb == [0, 0, 0], axis=2) & (alpha == 255)
-                fully_transparent = (alpha == 0)
+                fully_transparent = alpha == 0
                 mask = np.where(black_and_opaque, 0, 255)
                 mask[fully_transparent] = 255
                 mask = mask.astype(np.uint8)
@@ -120,11 +123,23 @@ class MotionDetector:
             return True
 
         now = datetime.now().time()
-        start_time_conf = self.schedule_config.get("start_time", {"hour": 0, "minute": 0})
+        start_time_conf = self.schedule_config.get(
+            "start_time", {"hour": 0, "minute": 0}
+        )
         end_time_conf = self.schedule_config.get("end_time", {"hour": 23, "minute": 59})
 
-        start_time = now.replace(hour=start_time_conf["hour"], minute=start_time_conf["minute"], second=0, microsecond=0)
-        end_time = now.replace(hour=end_time_conf["hour"], minute=end_time_conf["minute"], second=59, microsecond=999999)
+        start_time = now.replace(
+            hour=start_time_conf["hour"],
+            minute=start_time_conf["minute"],
+            second=0,
+            microsecond=0,
+        )
+        end_time = now.replace(
+            hour=end_time_conf["hour"],
+            minute=end_time_conf["minute"],
+            second=59,
+            microsecond=999999,
+        )
 
         return start_time <= now <= end_time
 
@@ -228,8 +243,5 @@ class MotionDetector:
 
 
 if __name__ == "__main__":
-    try:
-        detector = MotionDetector()
-        detector.run()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    detector = MotionDetector()
+    detector.run()
