@@ -6,17 +6,21 @@ mask可讀取三種圖, 單通道, RGB, RGBA
 注意mask永遠都是單通道
 
 # 以下開機自動執行與掛載行動硬碟
-開創要mount的資料夾
-`sudo mkdir /media/ex_hdd`
-一般設定fstab會設定硬碟UUID, 但如果不綁定特定硬碟:
-`sudo nano /etc/fstab`
+直接對行動硬碟命名, 作為mount的依據, 例如 `EX_HDD`  
+開創要mount的資料夾  
 ```bash
-/dev/sda2            /media/ex_hdd         ext4           defaults
-# <OR>
-/dev/sda1             /media/ex_hdd         vfat           nofail,noauto,x-systemd.automount,uid=1000,gid=1000,dmask=000,fmask=111,user    0 2
-# <OR>
-UUID=$(blkid -s UUID -o value /dev/sda1)       /media/ex_hdd         vfat           nofail,noauto,x-systemd.automount,uid=1000,gid=1000,dmask=000,fmask=111,user    0 2
-# 或用lsblk -f 來查詢
+sudo mkdir /media/ex_hdd
+# 設定特定資料夾權限, 以免無法作為ftp初始登入路徑
+sudo chmod 775 /media/ex_hdd
+sudo chown $USER:$USER /media/ex_hdd
+```
+先用指令查是否能找到隨身硬碟  
+`lsblk -o NAME,SIZE,UUID,MOUNTPOINT`  
+`sudo blkid -s UUID -o value /dev/sdb1`  
+設定fstab  
+`sudo nano /etc/fstab`  
+```bash
+LABEL=EX_HDD      /media/ex_hdd         vfat           nofail,noauto,x-systemd.automount,uid=1000,gid=1000,dmask=000,fmask=111,user    0 2
 
 # 空白自動加減對齊
 ```

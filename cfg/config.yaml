@@ -1,6 +1,6 @@
 # 來源
 # source: rtsp://user:password@ip:port/stream
-source: 0
+source: /dev/video0
 video_fps: 30
 
 # 過濾相關

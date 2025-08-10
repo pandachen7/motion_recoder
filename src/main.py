@@ -62,9 +62,8 @@ class MotionDetector:
 
         # rtmp, http沒試過
         self.ffmpeg_source = self.video_source
-        if self.video_source == 0:
+        if self.video_source.startswith("/dev/video"):
             self.video_type = "stream"
-            self.ffmpeg_source = "/dev/video0"
         elif "://" in self.video_source:
             self.video_type = "stream"
         else:
