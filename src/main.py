@@ -1,9 +1,9 @@
 import os
-import subprocess
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from subprocess import Popen
 
 import cv2
 import numpy as np
@@ -30,6 +30,7 @@ class MotionDetector:
             self.config = yaml.load(f)
 
         self.loaded = False
+        self.proc = None
 
         self.video_source = self.config["source"]
         self.video_fps = self.config.get("video_fps", 30)
@@ -47,13 +48,13 @@ class MotionDetector:
 
         self.rec_method = self.config.get("rec_method", "opencv")
         self.rec_audio = self.config.get("rec_audio", False)
-        self.use_hwaccel = self.config.get("use_hwaccel", None)
+        # self.use_hwaccel = self.config.get("use_hwaccel", None)
         self.record_fps = self.config.get("record_fps", 5)
         self.record_seconds = self.config.get("record_seconds", 30)
 
         self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
 
-        self.imshow_enabled = self.config["imshow"]
+        self.imshow_enabled = self.config.get("imshow", False)
 
         self.schedule_config = self.config.get("schedule", {})
 
@@ -106,7 +107,10 @@ class MotionDetector:
             else:
                 raise ValueError(f"Unsupported image shape: {mask.shape}")
 
-            cv2.imshow("Mask", mask)
+            resized_mask = mask
+            cv2.resize(resized_mask, (640, 480), interpolation=cv2.INTER_NEAREST)
+            cv2.imshow("Mask Sample", resized_mask)
+
             cv2.waitKey(0)
             self.mask = mask
             log.d("load mask successfully")
@@ -284,9 +288,9 @@ class MotionDetector:
 
         if self.rec_method == "ffmpeg":
             cmd = ["ffmpeg"]
-            if self.use_hwaccel == "qsv":
-                # cmd += ["-hwaccel", "qsv", "-c:v", "h264_qsv"]
-                cmd += ["-hwaccel", "qsv"]
+            # if self.use_hwaccel == "qsv":
+            #     # cmd += ["-hwaccel", "qsv", "-c:v", "h264_qsv"]
+            #     cmd += ["-hwaccel", "qsv"]
             cmd += [
                 "-i",
                 self.ffmpeg_source,
@@ -302,7 +306,7 @@ class MotionDetector:
             cmd += ["-c:v", "copy", filename]  # 直接copy到檔案
 
             log.d(f"ffmpeg cmd: {cmd}")
-            subprocess.run(cmd)
+            self.proc = Popen(cmd)
         elif self.rec_method == "opencv":
             # fourcc = cv2.VideoWriter_fourcc(*"XVID")
             self.video_writer = cv2.VideoWriter(
@@ -316,6 +320,17 @@ class MotionDetector:
             if self.video_writer is not None:
                 self.video_writer.release()
                 self.video_writer = None
+            if self.proc is not None:
+                log.w("ffmpeg process still running")
+                # proc.stdin.write(b'q')
+                # proc.stdin.flush()
+                # <OR>
+                # 發送 SIGTERM 信號給 FFmpeg 進程
+                # os.kill(proc.pid, signal.SIGTERM)
+                # <OR>
+                # self.proc.terminate()
+                # self.proc.wait()
+                # self.proc = None
             log.i("Stopped recording.")
 
 

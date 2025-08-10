@@ -18,7 +18,7 @@ path_out_external: /media/ex_hdd/  # 2nd 儲存到指定位置
 path_out_local: ./recordings  # 3rd if not use or not detect external, then use this path as storage folder
 rec_method: ffmpeg  # or opencv
 rec_audio: false
-use_hwaccel: qsv  # 或 none
+# use_hwaccel: qsv  # 太舊了, 不需要
 record_fps: 5
 record_seconds: 10
 
