@@ -49,20 +49,14 @@ ffmpeg -hwaccel qsv -c:v h264_qsv -i input.mp4 -c:v h264_qsv -preset fast -crf 2
 # 直接pass, 但無法改變fps與品質
 ffmpeg -f v4l2 -i XXX -c:v copy out.mp4
 
-# 使用x264來錄影5 fps
-ffmpeg -i input.mp4 -r 5 -c:v libx264 -preset fast output.mp4
+# 使用x264來錄影30秒, 5 fps
+ffmpeg -i /dev/video0 -t 30 -r 5 -c:v libx264 -preset fast output.mp4
 ```
 
 ### webcam共用
 ```
 sudo modprobe v4l2loopback video_nr=30 exclusive_caps=1 card_label="loopback_cam"
 ffmpeg -f v4l2 -i /dev/video0 -codec copy -f v4l2 /dev/video30
-```
-
-### 查看身邊設備的名稱
-```
-ffmpeg -list_devices true -i dummy
-ffmpeg -f v4l2 -list_formats all -i /dev/video0
 ```
 
 ### 查詢rtsp編碼格式, 一般來說ffmpeg就已經會自動偵測編碼格式

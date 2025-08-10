@@ -64,7 +64,7 @@ class MotionDetector:
         self.ffmpeg_source = self.video_source
         if self.video_source == 0:
             self.video_type = "stream"
-            self.ffmpeg_source = "裝置名稱"
+            self.ffmpeg_source = "/dev/video0"
         elif "://" in self.video_source:
             self.video_type = "stream"
         else:
@@ -291,6 +291,8 @@ class MotionDetector:
             cmd += [
                 "-i",
                 self.ffmpeg_source,
+                "-t",
+                str(self.record_seconds),
                 "-preset",
                 "veryfast",
                 # "-r",
