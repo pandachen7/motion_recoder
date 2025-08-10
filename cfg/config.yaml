@@ -13,14 +13,14 @@ motion_area_threshold: 3000
 
 # 錄影相關, 如果x264太吃力, 就改回XVID
 use_external_hd: true
-select_partition_device: /dev/sdb1  # 1st 直接選取特定分割區並作為儲存的對象
-path_out_external: /media/ex_hdd/  # 2nd 儲存到指定位置
+path_out_external: /media/ex_hdd/  # 1st 儲存到指定位置, 務必設定fstab
+select_partition_device: /dev/sdb1  # 2nd 直接選取特定分割區並作為儲存的對象, 小心sdx會變
 path_out_local: ./recordings  # 3rd if not use or not detect external, then use this path as storage folder
 rec_method: ffmpeg  # or opencv
 rec_audio: false
-# use_hwaccel: qsv  # 太舊了, 不需要
-record_fps: 5
-record_seconds: 10
+copy_stream: true
+record_fps: 5  # copy_stream為false才會轉換特定fps
+record_seconds: 60
 
 # fourcc: x264
 fourcc: XVID

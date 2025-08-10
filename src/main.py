@@ -48,7 +48,7 @@ class MotionDetector:
 
         self.rec_method = self.config.get("rec_method", "opencv")
         self.rec_audio = self.config.get("rec_audio", False)
-        # self.use_hwaccel = self.config.get("use_hwaccel", None)
+        self.copy_stream = self.config.get("copy_stream", False)
         self.record_fps = self.config.get("record_fps", 5)
         self.record_seconds = self.config.get("record_seconds", 30)
 
@@ -138,7 +138,9 @@ class MotionDetector:
             self._day_now = datetime.now().day
             folder_root = self.path_out_local
             if self.use_external_hd:
-                if self.select_partition_device:
+                if self.path_out_external and Path(self.path_out_external).is_dir():
+                    folder_root = self.path_out_external
+                elif self.select_partition_device:
                     partitions = psutil.disk_partitions()
                     for p in partitions:
                         if (
@@ -147,8 +149,6 @@ class MotionDetector:
                         ):
                             folder_root = p.mountpoint
                             break
-                elif self.path_out_external and Path(self.path_out_external).is_dir():
-                    folder_root = self.path_out_external
                 else:
                     log.warning(
                         f"no external hard disk detected. use local space `{self.path_out_local}`"
@@ -288,22 +288,28 @@ class MotionDetector:
 
         if self.rec_method == "ffmpeg":
             cmd = ["ffmpeg"]
-            # if self.use_hwaccel == "qsv":
-            #     # cmd += ["-hwaccel", "qsv", "-c:v", "h264_qsv"]
-            #     cmd += ["-hwaccel", "qsv"]
             cmd += [
                 "-i",
                 self.ffmpeg_source,
                 "-t",
                 str(self.record_seconds),
-                "-preset",
-                "veryfast",
-                # "-r",
-                # str(self.record_fps),
+                # "-preset",
+                # "veryfast",
             ]
             if not self.rec_audio:
                 cmd += ["-an"]
-            cmd += ["-c:v", "copy", filename]  # 直接copy到檔案
+            if self.copy_stream:
+                cmd += ["-c", "copy"]
+            else:
+                cmd += [
+                    # "-c:v",
+                    # "libx264",
+                    # "-crf",
+                    # "18",
+                    "-r",
+                    str(self.record_fps),
+                ]
+            cmd += [filename]
 
             log.d(f"ffmpeg cmd: {cmd}")
             self.proc = Popen(cmd)
