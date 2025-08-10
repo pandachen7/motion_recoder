@@ -4,8 +4,8 @@ source: /dev/video0
 video_fps: 30
 
 # 過濾相關
-sample_per_second: 1
-max_buff_frames: 10
+sample_per_second: 2
+max_buff_frames: 5
 mask_path: ./img/mask.png
 
 # 偵測相關
@@ -27,6 +27,7 @@ fourcc: XVID
 
 # 是否show影像, 只適合一開始做測試
 imshow: true
+win_resolution: [600, 300]
 
 
 # 排程錄影

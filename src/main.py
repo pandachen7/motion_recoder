@@ -55,6 +55,7 @@ class MotionDetector:
         self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
 
         self.imshow_enabled = self.config.get("imshow", False)
+        self.win_width, self.win_height = self.config.get("win_resolution", [640, 480])
 
         self.schedule_config = self.config.get("schedule", {})
 
@@ -107,12 +108,14 @@ class MotionDetector:
             else:
                 raise ValueError(f"Unsupported image shape: {mask.shape}")
 
-            resized_mask = mask
-            cv2.resize(resized_mask, (640, 480), interpolation=cv2.INTER_NEAREST)
-            cv2.imshow("Mask Sample", resized_mask)
-
-            cv2.waitKey(0)
             self.mask = mask
+            if self.mask and self.imshow_enabled:
+                resized = cv2.resize(
+                    mask,
+                    (self.win_width, self.win_height),
+                    interpolation=cv2.INTER_AREA,
+                )
+                cv2.imshow("mask", resized)
             log.d("load mask successfully")
 
         self.frame_buffer = []
@@ -264,10 +267,25 @@ class MotionDetector:
                         self.stop_recording()
 
                 if self.imshow_enabled:
-                    cv2.imshow("Frame", frame)
-                    cv2.imshow("Thresh", thresh)
+                    resized = cv2.resize(
+                        frame,
+                        (self.win_width, self.win_height),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    cv2.imshow("frame", resized)
+                    resized = cv2.resize(
+                        thresh,
+                        (self.win_width, self.win_height),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    cv2.imshow("Thresh", resized)
                     if self.background is not None:
-                        cv2.imshow("Background", self.background)
+                        resized = cv2.resize(
+                            self.background,
+                            (self.win_width, self.win_height),
+                            interpolation=cv2.INTER_AREA,
+                        )
+                        cv2.imshow("Background", resized)
 
             if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
                 break
