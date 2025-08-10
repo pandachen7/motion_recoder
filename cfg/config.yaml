@@ -1,6 +1,7 @@
 # 來源
 # source: rtsp://user:password@ip:port/stream
-source: /dev/video0
+source: /dev/video0  # 偵測主要來源, 可稍微模糊
+# record_source: # 可設定不同來源並錄影, 沒設的話就錄影source
 video_fps: 30
 
 # 過濾相關
@@ -18,7 +19,7 @@ select_partition_device: /dev/sdb1  # 2nd 直接選取特定分割區並作為�
 path_out_local: ./recordings  # 3rd if not use or not detect external, then use this path as storage folder
 rec_method: ffmpeg  # or opencv
 rec_audio: false
-copy_stream: true
+copy_stream: true  # h265建議使用, 就不用解碼再編碼
 record_fps: 5  # copy_stream為false才會轉換特定fps
 record_seconds: 60
 
@@ -26,7 +27,7 @@ record_seconds: 60
 fourcc: XVID
 
 # 是否show影像, 只適合一開始做測試
-imshow: true
+imshow: false
 win_resolution: [600, 300]
 
 

@@ -33,6 +33,7 @@ class MotionDetector:
         self.proc = None
 
         self.video_source = self.config["source"]
+        self.record_source = self.config.get("record_source", None)
         self.video_fps = self.config.get("video_fps", 30)
         self.sample_per_second = self.config["sample_per_second"]
         self.max_buff_frames = self.config["max_buff_frames"]
@@ -63,7 +64,10 @@ class MotionDetector:
             self.sample_per_second = 1
 
         # rtmp, http沒試過
-        self.ffmpeg_source = self.video_source
+        if self.record_source:
+            self.ffmpeg_source = self.record_source
+        else:
+            self.ffmpeg_source = self.video_source
         if self.video_source.startswith("/dev/video"):
             self.video_type = "stream"
         elif "://" in self.video_source:
@@ -109,7 +113,7 @@ class MotionDetector:
                 raise ValueError(f"Unsupported image shape: {mask.shape}")
 
             self.mask = mask
-            if self.mask and self.imshow_enabled:
+            if self.imshow_enabled:
                 resized = cv2.resize(
                     mask,
                     (self.win_width, self.win_height),
@@ -215,6 +219,7 @@ class MotionDetector:
                 time.sleep(60)  # 不在排程內
                 continue
 
+            t1 = time.time()
             self.toNextFrame()
             with self.lock:
                 if self.latest_frame is None:
@@ -286,7 +291,7 @@ class MotionDetector:
                             interpolation=cv2.INTER_AREA,
                         )
                         cv2.imshow("Background", resized)
-
+            log.d(f"spend time: {time.time() - t1}, fps: {1 / (time.time() - t1)}")
             if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
