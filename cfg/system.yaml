@@ -2,34 +2,38 @@
 # source: rtsp://user:password@ip:port/stream
 source: /dev/video0  # 偵測主要來源, 可稍微模糊
 # record_source: # 可設定不同來源並錄影, 沒設的話就錄影source
-video_fps: 30
 
 # 過濾相關
-sample_per_second: 2
-max_buff_frames: 5
+sample_per_n_second: 2  # 每N秒一個sample
+max_buff_frames: 5  # 最多儲存幾個frame當作background
 mask_path: ./img/mask.png
 
 # 偵測相關
 motion_area_threshold: 3000
 
-# 錄影相關, 如果x264太吃力, 就改回XVID
+# 儲存file system相關
 use_external_hd: true
 path_out_external: /media/ex_hdd/  # 1st 儲存到指定位置, 務必設定fstab
 select_partition_device: /dev/sdb1  # 2nd 直接選取特定分割區並作為儲存的對象, 小心sdx會變
 path_out_local: ./recordings  # 3rd if not use or not detect external, then use this path as storage folder
+
+# 錄影相關
+record_seconds: 60
 rec_method: ffmpeg  # or opencv
+
+# 使用ffmpeg另外錄影, 注意webcam一次只能有一個存取
 rec_audio: false
 copy_stream: true  # h265建議使用, 就不用解碼再編碼
-record_fps: 5  # copy_stream為false才會轉換特定fps
-record_seconds: 60
+ffmpeg_fps: 5  # copy_stream為false才會轉換特定fps
 
+# 使用opencv錄影, 如果x264太吃力, 就改回XVID
 # fourcc: x264
 fourcc: XVID
+opencv_fps: 30  # 如果無法偵測來源fps, 則使用這個
 
 # 是否show影像, 只適合一開始做測試
-imshow: false
-win_resolution: [600, 300]
-
+imshow: true
+window_size: [600, 300]
 
 # 排程錄影
 schedule:

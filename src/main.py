@@ -8,12 +8,12 @@ from subprocess import Popen
 import cv2
 import numpy as np
 import psutil
-from ruamel.yaml import YAML
 
+from config import Config
 from loglo import getUniqueLogger
 
 log = getUniqueLogger(__file__)
-yaml = YAML()
+
 
 FORMAT_DATE = "%Y-%m-%d"
 FORMAT_TIME = "%y%m%d_%H%M%S_%f"
@@ -24,73 +24,53 @@ def getDate():
     return datetime.now().strftime(FORMAT_DATE)
 
 
-class MotionDetector:
-    def __init__(self, config_path="./cfg/config.yaml"):
-        with open(config_path, encoding="utf-8") as f:
-            self.config = yaml.load(f)
+def writeFont(img, text, x, y, color=(0, 255, 255), font_scale=1, thickness=1):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    shadow = (0, 0, 0)
 
+    # 左上角的座標 (注意y是baseline位置)
+    x, y = 10, 30  # 讓字不會貼在邊界
+    cv2.putText(
+        img, text, (x + 2, y + 2), font, font_scale, shadow, thickness, cv2.LINE_AA
+    )
+    cv2.putText(img, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+
+
+class MotionDetector:
+    def __init__(self):
         self.loaded = False
         self.proc = None
 
-        self.video_source = self.config["source"]
-        self.record_source = self.config.get("record_source", None)
-        self.video_fps = self.config.get("video_fps", 30)
-        self.sample_per_second = self.config["sample_per_second"]
-        self.max_buff_frames = self.config["max_buff_frames"]
-        self.mask_path = self.config.get("mask_path")
-
-        self.motion_area_threshold = self.config["motion_area_threshold"]
-
         self.output_path = "./recordings"
-        self.use_external_hd = self.config.get("use_external_hd", False)
-        self.select_partition_device = self.config.get("select_partition_device", "")
-        self.path_out_external = self.config.get("path_out_external", "")
-        self.path_out_local = self.config.get("path_out_local", "./recordings")
-
-        self.rec_method = self.config.get("rec_method", "opencv")
-        self.rec_audio = self.config.get("rec_audio", False)
-        self.copy_stream = self.config.get("copy_stream", False)
-        self.record_fps = self.config.get("record_fps", 5)
-        self.record_seconds = self.config.get("record_seconds", 30)
-
-        self.fourcc = cv2.VideoWriter_fourcc(*self.config["fourcc"])
-
-        self.imshow_enabled = self.config.get("imshow", False)
-        self.win_width, self.win_height = self.config.get("win_resolution", [640, 480])
-
-        self.schedule_config = self.config.get("schedule", {})
-
-        if self.sample_per_second < 1:
-            self.sample_per_second = 1
 
         # rtmp, http沒試過
-        if self.record_source:
-            self.ffmpeg_source = self.record_source
+        if Config.record_source:
+            self.ffmpeg_source = Config.record_source
         else:
-            self.ffmpeg_source = self.video_source
-        if self.video_source.startswith("/dev/video"):
+            self.ffmpeg_source = Config.video_source
+        if Config.video_source.startswith("/dev/video"):
             self.video_type = "stream"
-        elif "://" in self.video_source:
+        elif "://" in Config.video_source:
             self.video_type = "stream"
         else:
             self.video_type = "file"
 
-        self.cap = cv2.VideoCapture(self.video_source)
+        self.cap = cv2.VideoCapture(Config.video_source)
         if not self.cap.isOpened():
             raise ValueError("Error: Could not open video source.")
 
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
         if self.fps == 0:
-            self.fps = self.video_fps
+            self.fps = Config.opencv_fps
 
         self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         log.d(f"fps: {self.fps}, width: {self.width}, height: {self.height}")
 
         self.mask = None
-        if self.mask_path and os.path.exists(self.mask_path):
-            # mask = cv2.imread(self.mask_path, cv2.IMREAD_GRAYSCALE)
-            mask = cv2.imread(self.mask_path, cv2.IMREAD_UNCHANGED)
+        if Config.mask_path and os.path.exists(Config.mask_path):
+            # mask = cv2.imread(Config.mask_path, cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(Config.mask_path, cv2.IMREAD_UNCHANGED)
             mask = cv2.resize(mask, (self.width, self.height))
             if len(mask.shape) == 2:
                 # 灰階圖（單通道）, 0 是 mask，其餘為非 mask, 未測試
@@ -113,10 +93,10 @@ class MotionDetector:
                 raise ValueError(f"Unsupported image shape: {mask.shape}")
 
             self.mask = mask
-            if self.imshow_enabled:
+            if Config.imshow_enabled:
                 resized = cv2.resize(
                     mask,
-                    (self.win_width, self.win_height),
+                    (Config.win_width, Config.win_height),
                     interpolation=cv2.INTER_AREA,
                 )
                 cv2.imshow("mask", resized)
@@ -143,24 +123,24 @@ class MotionDetector:
         # this is for unified folder
         if self._day_now != datetime.now().day:
             self._day_now = datetime.now().day
-            folder_root = self.path_out_local
-            if self.use_external_hd:
-                if self.path_out_external and Path(self.path_out_external).is_dir():
-                    folder_root = self.path_out_external
-                elif self.select_partition_device:
+            folder_root = Config.path_out_local
+            if Config.use_external_hd:
+                if Config.path_out_external and Path(Config.path_out_external).is_dir():
+                    folder_root = Config.path_out_external
+                elif Config.select_partition_device:
                     partitions = psutil.disk_partitions()
                     for p in partitions:
                         if (
-                            p.device == self.select_partition_device
+                            p.device == Config.select_partition_device
                             and Path(p.mountpoint).is_dir()
                         ):
                             folder_root = p.mountpoint
                             break
                 else:
                     log.warning(
-                        f"no external hard disk detected. use local space `{self.path_out_local}`"
+                        f"no external hard disk detected. use local space `{Config.path_out_local}`"
                     )
-                    folder_root = self.path_out_local
+                    folder_root = Config.path_out_local
 
             self.output_path = Path(folder_root, getDate()).as_posix()
             log.info(f"change folder to {self.output_path}")
@@ -184,14 +164,16 @@ class MotionDetector:
                 self.latest_frame = None
 
     def _is_in_schedule(self):
-        if not self.schedule_config.get("enabled", False):
+        if not Config.schedule_config.get("enabled", False):
             return True
 
         now = datetime.now().time()
-        start_time_conf = self.schedule_config.get(
+        start_time_conf = Config.schedule_config.get(
             "start_time", {"hour": 0, "minute": 0}
         )
-        end_time_conf = self.schedule_config.get("end_time", {"hour": 23, "minute": 59})
+        end_time_conf = Config.schedule_config.get(
+            "end_time", {"hour": 23, "minute": 59}
+        )
 
         start_time = now.replace(
             hour=start_time_conf["hour"],
@@ -233,10 +215,10 @@ class MotionDetector:
             gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
             current_time = time.time()
-            if current_time - last_sample_time >= 1.0 / self.sample_per_second:
+            if current_time - last_sample_time >= Config.sample_per_n_second:
                 last_sample_time = current_time
                 self.frame_buffer.append(gray)
-                if len(self.frame_buffer) > self.max_buff_frames:
+                if len(self.frame_buffer) > Config.max_buff_frames:
                     self.frame_buffer.pop(0)
 
             if len(self.frame_buffer) > 0:
@@ -244,6 +226,7 @@ class MotionDetector:
                     np.uint8
                 )
 
+            motion_area = 0
             if self.background is not None:
                 frame_delta = cv2.absdiff(self.background, gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
@@ -255,12 +238,11 @@ class MotionDetector:
                     thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
                 )
 
-                motion_area = 0
                 for contour in contours:
                     motion_area = max(motion_area, cv2.contourArea(contour))
                 # log.d(motion_area)
 
-                if motion_area > self.motion_area_threshold:
+                if motion_area > Config.motion_area_threshold:
                     self.last_motion_time = time.time()
                     if not self.is_recording:
                         self.start_recording()
@@ -268,36 +250,43 @@ class MotionDetector:
                 if self.is_recording:
                     if self.video_writer is not None:
                         self.video_writer.write(frame)
-                    if time.time() - self.last_motion_time > self.record_seconds:
+                    if time.time() - self.last_motion_time > Config.record_seconds:
                         self.stop_recording()
 
-                if self.imshow_enabled:
+                if Config.imshow_enabled:
                     resized = cv2.resize(
                         frame,
-                        (self.win_width, self.win_height),
+                        (Config.win_width, Config.win_height),
                         interpolation=cv2.INTER_AREA,
                     )
                     cv2.imshow("frame", resized)
+
                     resized = cv2.resize(
                         thresh,
-                        (self.win_width, self.win_height),
+                        (Config.win_width, Config.win_height),
                         interpolation=cv2.INTER_AREA,
                     )
+                    writeFont(
+                        resized, f"max_area: {motion_area}", 10, 20, color=(255, 255, 255)
+                    )
                     cv2.imshow("Thresh", resized)
+
                     if self.background is not None:
                         resized = cv2.resize(
                             self.background,
-                            (self.win_width, self.win_height),
+                            (Config.win_width, Config.win_height),
                             interpolation=cv2.INTER_AREA,
                         )
                         cv2.imshow("Background", resized)
-            log.d(f"motion detect fps: {1 / (time.time() - t1)}")
-            if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
+            log.d(
+                f"motion detect fps: {1 / (time.time() - t1):.2f}, max motion area: {motion_area:.0f}"
+            )
+            if Config.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
         self.stop_recording()
         self.cap.release()
-        if self.imshow_enabled:
+        if Config.imshow_enabled:
             cv2.destroyAllWindows()
 
     def start_recording(self):
@@ -309,19 +298,19 @@ class MotionDetector:
         time_str = now.strftime("%H_%M_%S")
         filename = os.path.join(output_dir, f"{time_str}.mp4")
 
-        if self.rec_method == "ffmpeg":
+        if Config.rec_method == "ffmpeg":
             cmd = ["ffmpeg"]
             cmd += [
                 "-i",
                 self.ffmpeg_source,
                 "-t",
-                str(self.record_seconds),
+                str(Config.record_seconds),
                 # "-preset",
                 # "veryfast",
             ]
-            if not self.rec_audio:
+            if not Config.rec_audio:
                 cmd += ["-an"]
-            if self.copy_stream:
+            if Config.copy_stream:
                 cmd += ["-c", "copy"]
             else:
                 cmd += [
@@ -330,16 +319,16 @@ class MotionDetector:
                     # "-crf",
                     # "18",
                     "-r",
-                    str(self.record_fps),
+                    str(Config.ffmpeg_fps),
                 ]
             cmd += [filename]
 
             log.d(f"ffmpeg cmd: {cmd}")
             self.proc = Popen(cmd)
-        elif self.rec_method == "opencv":
-            # fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        elif Config.rec_method == "opencv":
+            fourcc = cv2.VideoWriter_fourcc(*Config.fourcc)
             self.video_writer = cv2.VideoWriter(
-                filename, self.fourcc, self.fps, (self.width, self.height)
+                filename, fourcc, self.fps, (self.width, self.height)
             )
         log.i(f"Started recording: {filename}")
 
