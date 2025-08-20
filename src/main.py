@@ -291,7 +291,7 @@ class MotionDetector:
                             interpolation=cv2.INTER_AREA,
                         )
                         cv2.imshow("Background", resized)
-            log.d(f"spend time: {time.time() - t1}, fps: {1 / (time.time() - t1)}")
+            log.d(f"motion detect fps: {1 / (time.time() - t1)}")
             if self.imshow_enabled and cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 

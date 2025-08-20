@@ -1,0 +1,7 @@
+[project]
+name = "motion-recoder"
+version = "0.1.0"
+description = "Motion Recorder for camera"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
