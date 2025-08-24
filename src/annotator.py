@@ -2,7 +2,7 @@ import sys
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QPoint, QRect, Qt
 from PyQt6.QtGui import QAction, QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -94,14 +94,6 @@ class Annotator(QMainWindow):
         self.toolbar.addAction(self.draw_bbox_action)
         self.draw_bbox_action.setToolTip("Draw Bbox")
 
-        self.draw_area_action = QAction(
-            QIcon.fromTheme("draw-rectangle"), "Draw Area", self
-        )
-        self.draw_area_action.setIcon(QIcon.fromTheme("draw-rectangle"))
-        self.draw_area_action.setCheckable(True)
-        self.draw_area_action.toggled.connect(self.toggle_draw_area_mode)
-        self.toolbar.addAction(self.draw_area_action)
-
         self.toolbar.addSeparator()
 
         self.save_mask_action = QAction(
@@ -146,8 +138,6 @@ class Annotator(QMainWindow):
         self.draw_bbox_mode = False
         self.bboxes = []
         self.current_bbox = None
-        self.draw_area_mode = False
-        self.area_bbox = None
         self.fill_mode = False
 
         # for test
@@ -174,7 +164,6 @@ class Annotator(QMainWindow):
             self.draw_quad_action.setChecked(False)
             self.brush_action.setChecked(False)
             self.erase_action.setChecked(False)
-            self.draw_area_action.setChecked(False)
             self.fill_action.setChecked(False)
 
     def toggle_draw_quad_mode(self, checked):
@@ -187,15 +176,6 @@ class Annotator(QMainWindow):
         if not checked:
             self.quad_points = []  # Reset points when mode is turned off
             self.update_display()  # Remove any drawn quad
-
-    def toggle_draw_area_mode(self, checked):
-        self.draw_area_mode = checked
-        if checked:
-            self.draw_quad_action.setChecked(False)
-            self.brush_action.setChecked(False)
-            self.erase_action.setChecked(False)
-            self.draw_bbox_action.setChecked(False)
-            self.fill_action.setChecked(False)
 
     def toggle_fill_mode(self, checked):
         self.fill_mode = checked
@@ -345,18 +325,7 @@ class Annotator(QMainWindow):
         # Make a copy to avoid issues with QImage buffer
         display_frame_copy = self.display_frame.copy()
 
-        # Resize mask and apply it
-        if self.mask is not None:
-            display_mask = cv2.resize(
-                self.mask, (display_frame_copy.shape[1], display_frame_copy.shape[0])
-            )
-            display_frame_copy[display_mask == 0] = [0, 0, 0]  # Black for masked area
-
-        if self.draw_quad_mode and self.quad_points:
-            # This part is tricky because QPainter works on QPixmap/QImage, not numpy array directly.
-            # We will draw on the pixmap after converting the numpy array.
-            pass
-
+        # Create base pixmap from the frame
         h, w, ch = display_frame_copy.shape
         bytes_per_line = ch * w
         q_img = QImage(
@@ -364,8 +333,34 @@ class Annotator(QMainWindow):
         )
         pixmap = QPixmap.fromImage(q_img)
         log.d(f"pixmap size: {pixmap.size()}")
+
+        # Start a single painter for all drawing operations
+        painter = QPainter(pixmap)
+
+        # Draw the mask overlay
+        if self.mask is not None:
+            display_mask = cv2.resize(self.mask, (pixmap.width(), pixmap.height()))
+
+            # Create a 4-channel RGBA numpy array for the overlay
+            rgba_mask = np.zeros((pixmap.height(), pixmap.width(), 4), dtype=np.uint8)
+            rgba_mask[display_mask == 0] = [0, 0, 0, 150]  # semi-transparent black
+
+            # Convert to QImage and then QPixmap
+            h_mask, w_mask, ch_mask = rgba_mask.shape
+            bytes_per_line_mask = ch_mask * w_mask
+            mask_q_img = QImage(
+                rgba_mask.data,
+                w_mask,
+                h_mask,
+                bytes_per_line_mask,
+                QImage.Format.Format_ARGB32,
+            )
+            mask_pixmap = QPixmap.fromImage(mask_q_img)
+
+            painter.drawPixmap(0, 0, mask_pixmap)
+
+        # Draw other annotations (quads, bboxes)
         if self.draw_quad_mode and self.quad_points:
-            painter = QPainter(pixmap)
             pen = QPen(QColor(255, 0, 0), 2)  # Red pen
             painter.setPen(pen)
             for point in self.quad_points:
@@ -373,13 +368,13 @@ class Annotator(QMainWindow):
             if len(self.quad_points) == 4:
                 for i in range(4):
                     painter.drawLine(self.quad_points[i], self.quad_points[(i + 1) % 4])
-            painter.end()
-        log.d("t1")
+
+        log.d("t1")  # Keep original log points
         if self.draw_bbox_mode or self.bboxes:
-            painter = QPainter(pixmap)
             self.draw_bboxes(painter)
-            painter.end()
+
         log.d("t2")
+        painter.end()
         self.image_label.setPixmap(pixmap)
         log.d("t3")
 
@@ -438,11 +433,10 @@ class Annotator(QMainWindow):
                     pixmap = self.image_label.pixmap().copy()
                     self.draw_quad_and_area(pixmap)
             elif self.draw_bbox_mode:
-                self.drawing = True
-                self.current_bbox = [event.pos(), event.pos()]
-            elif self.draw_area_mode:
-                self.drawing = True
-                self.area_bbox = [event.pos(), event.pos()]
+                image_point = self._map_window_to_image_coords(event.pos())
+                if image_point:
+                    self.drawing = True
+                    self.current_bbox = [image_point, image_point]
             else:  # Brush or erase mode
                 image_point = self._map_window_to_image_coords(event.pos())
                 if image_point:
@@ -499,11 +493,10 @@ class Annotator(QMainWindow):
         ):
             # The other drawing modes still have the coordinate issue,
             # but we focus on the mask drawing first as requested.
-            if self.draw_bbox_mode:
-                self.current_bbox[1] = event.pos()
-                self.update_display()
-            elif self.draw_area_mode:
-                self.area_bbox[1] = event.pos()
+            if self.draw_bbox_mode and self.drawing:
+                image_point = self._map_window_to_image_coords(event.pos())
+                if image_point:
+                    self.current_bbox[1] = image_point
                 self.update_display()
             elif self.brush_action.isChecked() or self.erase_action.isChecked():
                 current_image_point = self._map_window_to_image_coords(event.pos())
@@ -553,43 +546,75 @@ class Annotator(QMainWindow):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            if self.draw_bbox_mode:
+            if self.draw_bbox_mode and self.drawing:
+                # The final point should also be mapped
+                image_point = self._map_window_to_image_coords(event.pos())
+                if image_point and self.current_bbox:
+                    self.current_bbox[1] = image_point
+
+                # Prevent adding a zero-sized or invalid bbox
+                if self.current_bbox and self.current_bbox[0] != self.current_bbox[1]:
+                    self.bboxes.append(self.current_bbox)
+
                 self.drawing = False
-                self.bboxes.append(self.current_bbox)
                 self.current_bbox = None
-            elif self.draw_area_mode:
-                self.drawing = False
             else:
                 self.drawing = False
             self.update_display()
 
     def draw_bboxes(self, painter):
-        pen = QPen(QColor(0, 255, 0), 2)  # Green pen for bboxes
+        # Draw saved bboxes (in green)
+        pen = QPen(QColor(0, 255, 0), 2)  # Green pen for saved bboxes
         painter.setPen(pen)
-        for bbox in self.bboxes:
-            p1 = bbox[0] - self.image_label.pos()
-            p2 = bbox[1] - self.image_label.pos()
-            painter.drawRect(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y())
-        if self.current_bbox:
-            p1 = self.current_bbox[0] - self.image_label.pos()
-            p2 = self.current_bbox[1] - self.image_label.pos()
-            painter.drawRect(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y())
-        if self.area_bbox:
-            p1 = self.area_bbox[0] - self.image_label.pos()
-            p2 = self.area_bbox[1] - self.image_label.pos()
-            painter.drawRect(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y())
-            self.calculate_area(p1, p2, painter)
+        for bbox_img_coords in self.bboxes:
+            # Convert image coordinates to pixmap coordinates for drawing
+            p1 = bbox_img_coords[0] * self.scale_factor
+            p2 = bbox_img_coords[1] * self.scale_factor
+            rect = QRect(p1.toPoint(), p2.toPoint()).normalized()
+            painter.drawRect(rect)
 
-    def calculate_area(self, p1, p2, painter):
-        width = abs(p2.x() - p1.x()) / self.scale_factor
-        height = abs(p2.y() - p1.y()) / self.scale_factor
-        area = width * height
-        area_text = f"Area: {area:.2f}"
-        font = painter.font()
-        font.setPointSize(12)
-        painter.setFont(font)
-        text_pos = QPoint(p2.x(), p2.y() - 10)
-        painter.drawText(text_pos.x(), text_pos.y() - 10, area_text)
+        # Draw the bbox currently being drawn (in red)
+        if self.current_bbox:
+            pen.setColor(QColor(255, 0, 0))  # Red pen for drawing bbox
+            painter.setPen(pen)
+
+            # Convert image coordinates to pixmap coordinates for drawing
+            p1_pix = self.current_bbox[0] * self.scale_factor
+            p2_pix = self.current_bbox[1] * self.scale_factor
+            rect = QRect(p1_pix.toPoint(), p2_pix.toPoint()).normalized()
+            painter.drawRect(rect)
+
+            # --- This is the new part from the reference snippet ---
+            # Calculate size in original image coordinates
+            orig_p1 = self.current_bbox[0]
+            orig_p2 = self.current_bbox[1]
+            w = abs(orig_p2.x() - orig_p1.x())
+            h = abs(orig_p2.y() - orig_p1.y())
+
+            # Don't show text for a single point
+            if w == 0 and h == 0:
+                return
+
+            text = f"{w}x{h}={w * h}"
+            font_metrics = painter.fontMetrics()
+            text_width = font_metrics.horizontalAdvance(text)
+            text_height = font_metrics.height()
+
+            # Position text near the second point of the bbox
+            text_pos = p2_pix.toPoint() + QPoint(15, 15)
+
+            # Draw text background
+            bg_rect = QRect(
+                text_pos,
+                QPoint(text_pos.x() + text_width + 4, text_pos.y() + text_height),
+            )
+            painter.fillRect(bg_rect, QColor(0, 0, 0, 150))
+
+            # Draw text
+            painter.setPen(QColor(255, 255, 255))  # White text
+            painter.drawText(
+                text_pos + QPoint(2, text_height - font_metrics.descent()), text
+            )
 
 
 if __name__ == "__main__":
