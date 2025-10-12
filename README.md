@@ -28,6 +28,7 @@ LABEL=EX_HDD      /media/ex_hdd         vfat           nofail,noauto,x-systemd.a
 
 ## systemd
 以下簡短範例
+`sudo systemctl edit --full --force recorder`
 ```
 [Unit]
 Description=Auto Webcam/RTSP Recording
@@ -67,3 +68,6 @@ ffmpeg -f v4l2 -i /dev/video0 -codec copy -f v4l2 /dev/video30
 ```
 ffprobe -v quiet -show_streams rtsp://your_rtsp_url
 ```
+
+### TODO:
+縮小背景解析度來增加速度, 但偵測最大動態區域門檻也要調整
