@@ -1,7 +1,86 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "motion-recoder"
-version = "0.1.0"
-description = "Motion Recorder for camera"
+version = "1.0.0"
+description = "Motion detection and recording system for video sources"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["motion-detection", "video-recording", "opencv", "surveillance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+dependencies = [
+    "opencv-python>=4.11.0.86",
+    "PyQt6>=6.8.1",
+    "dicttoxml>=1.7.16",
+    "ultralytics",
+    "ruamel.yaml",
+    "python-dotenv",
+    "psutil",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/motion-recoder"
+Documentation = "https://github.com/yourusername/motion-recoder#readme"
+Repository = "https://github.com/yourusername/motion-recoder"
+Issues = "https://github.com/yourusername/motion-recoder/issues"
+
+[project.scripts]
+motion-recorder = "motion_recoder.cli.main:main"
+motion-annotator = "motion_recoder.cli.annotator:runAnnotator"
+motion-player = "motion_recoder.cli.player:playVideo"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["motion_recoder*"]
+exclude = ["tests*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=motion_recoder --cov-report=html --cov-report=term"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false

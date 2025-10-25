@@ -1,6 +1,6 @@
 # 來源
 # source: rtsp://user:password@ip:port/stream
-source: /dev/video0  # 偵測主要來源, 可稍微模糊
+source: /dev/video0  # 偵測主要來源, 影像可稍微模糊
 # record_source: # 可設定不同來源並錄影, 沒設的話就錄影source
 
 # 過濾相關
